@@ -16,7 +16,7 @@ export async function analyze(request,env,reply){
  const len=Number(request.headers.get('Content-Length')||0);if(len>7300000)return reply({error:'Print muito grande.'},413);
  let input;try{const raw=await request.text();if(raw.length>7300000)return reply({error:'Print muito grande.'},413);input=JSON.parse(raw);}catch{return reply({error:'JSON inválido.'},400);}
  if(!/^image\/(png|jpeg|webp)$/i.test(input?.mimeType||'')||typeof input?.data!=='string'||input.data.length<32||input.data.length>7000000||!/^[A-Za-z0-9+/]+={0,2}$/.test(input.data))return reply({error:'Imagem inválida.'},400);
- const payload={contents:[{role:'user',parts:[{text:prompt},{inlineData:{mimeType:input.mimeType,data:input.data}}]}],generationConfig:{thinkingConfig:{thinkingLevel:'MINIMAL'},maxOutputTokens:1024,responseMimeType:'application/json',responseJsonSchema:schema}};
+ const payload={contents:[{role:'user',parts:[{text:prompt},{inlineData:{mimeType:input.mimeType,data:input.data}}]}],generationConfig:{thinkingConfig:{thinkingLevel:'LOW'},responseMimeType:'application/json',responseJsonSchema:schema}};
  let res;try{res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+MODEL+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify(payload),signal:AbortSignal.timeout(35000)});}catch{return reply({error:'Gemini não respondeu a tempo.'},504);}
  let j;try{j=await res.json()}catch{return reply({error:'Resposta inválida do Gemini.'},502);}
  if(!res.ok)return reply({error:'Gemini '+res.status+': '+safe(j?.error?.message,300).replace(/AIza[0-9A-Za-z_-]+/g,'[redacted]')},res.status===429?429:502);

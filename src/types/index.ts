@@ -49,12 +49,14 @@ export interface EventSettings {
   adminPinHash?: string;
 }
 
-export type ItemKind = 'store' | 'digital' | 'bundle';
-export type SubItemKind = 'store' | 'digital';
+export type ItemKind = 'store' | 'digital' | 'bundle' | 'misc';
+export type SubItemKind = 'store' | 'digital' | 'misc';
 export type ItemPriority = 1 | 2 | 3;
 
 export interface SubItem {
   id: string;
+  /** References an existing wishlist product. Remaining fields are a snapshot. */
+  sourceItemId?: string;
   title: string;
   price: number;
   kind: SubItemKind;
@@ -71,6 +73,7 @@ export interface WishItem {
   title: string;
   description: string;
   price: number;
+  shippingEstimate: number;
   priority: ItemPriority;
   storeName: string;
   url: string;

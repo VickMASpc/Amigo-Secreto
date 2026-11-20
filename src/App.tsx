@@ -36,6 +36,7 @@ import type {
   WishItem,
 } from './types';
 import { generateId, getCountdown } from './utils/format';
+import { resolveLinkedBundles } from './utils/wishBundles';
 
 const EMPTY_CART: UserCart = {
   items: [],
@@ -178,9 +179,11 @@ function AppContent() {
         currentUser?.role === 'admin')
   );
 
+  const effectiveItems = useMemo(() => resolveLinkedBundles(items), [items]);
+
   const detailItem = useMemo(
-    () => (detailItemId ? items.find((i) => i.id === detailItemId) ?? null : null),
-    [detailItemId, items]
+    () => (detailItemId ? effectiveItems.find((i) => i.id === detailItemId) ?? null : null),
+    [detailItemId, effectiveItems]
   );
 
   const userMap = useMemo(
@@ -365,7 +368,7 @@ function AppContent() {
     );
   }
 
-  const ownItems = items.filter((i) => i.ownerId === currentUser.id);
+  const ownItems = effectiveItems.filter((i) => i.ownerId === currentUser.id);
 
   return (
     <div className="min-h-screen bg-[#FAF7F2] pb-24 md:pb-10">
@@ -400,7 +403,7 @@ function AppContent() {
           <FeedView
             currentUser={currentUser}
             publicUsers={publicUsers}
-            items={items}
+            items={effectiveItems}
             loading={workspaceLoading}
             budget={settings.budget}
             cart={cart}
@@ -422,6 +425,7 @@ function AppContent() {
             settings={settings}
             canManageItems={canManageOwnItems}
             editingItem={editingItem}
+            availableItems={ownItems}
             onSaved={() => {
               setEditingItem(null);
               handleSelectTab('feed');
@@ -442,7 +446,7 @@ function AppContent() {
             cart={cart}
             budget={settings.budget}
             publicUsers={publicUsers}
-            allItems={items}
+            allItems={effectiveItems}
             onOpenOriginalItem={(item) => setDetailItemId(item.id)}
             onGoToFeed={() => handleSelectTab('feed')}
           />
@@ -464,7 +468,7 @@ function AppContent() {
             adminUsers={adminUsers}
             publicUsers={publicUsers}
             settings={settings}
-            allItems={items}
+            allItems={effectiveItems}
           />
         )}
       </main>

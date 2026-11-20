@@ -135,16 +135,17 @@ function mapWishItem(id: string, data: Record<string, unknown>): WishItem {
   const rawSubs = Array.isArray(data.subItems) ? data.subItems : [];
   const subItems: SubItem[] = rawSubs.map((s: Record<string, unknown>, idx) => ({
     id: typeof s.id === 'string' ? s.id : `sub-${idx}`,
+    ...(typeof s.sourceItemId === 'string' ? { sourceItemId: s.sourceItemId } : {}),
     title: typeof s.title === 'string' ? s.title : '',
     price: typeof s.price === 'number' && Number.isFinite(s.price) ? s.price : 0,
-    kind: s.kind === 'digital' ? 'digital' : 'store',
+    kind: s.kind === 'digital' ? 'digital' : s.kind === 'misc' ? 'misc' : 'store',
     url: typeof s.url === 'string' ? s.url : '',
     storeName: typeof s.storeName === 'string' ? s.storeName : '',
     image: typeof s.image === 'string' ? s.image : '',
     notes: typeof s.notes === 'string' ? s.notes : '',
   }));
 
-  const kind = data.kind === 'digital' || data.kind === 'bundle' ? data.kind : 'store';
+  const kind = data.kind === 'digital' || data.kind === 'bundle' ? data.kind : data.kind === 'store' && data.itemType === 'misc' ? 'misc' : 'store';
   const rawPriority = data.priority;
   const priority = rawPriority === 1 || rawPriority === 3 ? rawPriority : 2;
 
@@ -155,6 +156,7 @@ function mapWishItem(id: string, data: Record<string, unknown>): WishItem {
     title: typeof data.title === 'string' ? data.title : '',
     description: typeof data.description === 'string' ? data.description : '',
     price: typeof data.price === 'number' && Number.isFinite(data.price) ? data.price : 0,
+    shippingEstimate: typeof data.shippingEstimate === 'number' && Number.isFinite(data.shippingEstimate) && data.shippingEstimate >= 0 ? data.shippingEstimate : 0,
     priority,
     storeName: typeof data.storeName === 'string' ? data.storeName : '',
     url: typeof data.url === 'string' ? data.url : '',
@@ -471,10 +473,13 @@ export async function saveWishItem(
 
   const cleanPayload: Record<string, unknown> = {
     ownerId: input.ownerId,
-    kind: input.kind,
+    // Preserve compatibility with the user's already-published Firestore rules.
+    kind: input.kind === 'misc' ? 'store' : input.kind,
+    itemType: input.kind === 'misc' ? 'misc' : '',
     title: input.title.trim(),
     description: input.description.trim(),
     price: computedPrice,
+    shippingEstimate: Math.round(Math.max(0, Number.isFinite(input.shippingEstimate) ? input.shippingEstimate : 0) * 100) / 100,
     priority: input.priority,
     storeName: input.storeName.trim(),
     url: input.url.trim(),
