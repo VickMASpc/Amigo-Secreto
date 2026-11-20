@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Check,
+  FileText,
   Edit3,
   Layers,
   Package,
@@ -13,6 +14,7 @@ import {
 import type { PublicUser, WishItem } from '../types';
 import { formatBRL, getBudgetBadge, isValidImageSrc } from '../utils/format';
 import { Avatar } from './Avatar';
+import { totalWithShipping } from '../utils/wishBundles';
 
 interface WishCardProps {
   item: WishItem;
@@ -41,7 +43,7 @@ export const WishCard: React.FC<WishCardProps> = ({
 }) => {
   const [imgError, setImgError] = useState(false);
   const isOwn = item.ownerId === currentUserId;
-  const budgetInfo = getBudgetBadge(item.price, budget);
+  const budgetInfo = getBudgetBadge(totalWithShipping(item), budget);
 
   const subImages =
     item.kind === 'bundle'
@@ -93,6 +95,11 @@ export const WishCard: React.FC<WishCardProps> = ({
               Digital / Assinatura
             </span>
           </div>
+        ) : item.kind === 'misc' ? (
+          <div className="flex h-full w-full flex-col items-center justify-center bg-[#F6EFE5] p-4 text-[#7A581B]">
+            <FileText className="h-10 w-10" />
+            <span className="mt-2 text-xs font-bold uppercase">Pedido livre</span>
+          </div>
         ) : item.kind === 'bundle' ? (
           <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-[#C8963E]/25 via-[#FBF3E2] to-[#B83B35]/15 p-4 text-[#7A581B]">
             <Layers className="h-10 w-10" />
@@ -125,6 +132,8 @@ export const WishCard: React.FC<WishCardProps> = ({
                 <Layers className="h-3 w-3" />
                 Pacote ({item.subItems.length})
               </>
+            ) : item.kind === 'misc' ? (
+              <><FileText className="h-3 w-3" /> Pedido livre</>
             ) : item.kind === 'digital' ? (
               <>
                 <Sparkles className="h-3 w-3" />
@@ -183,8 +192,9 @@ export const WishCard: React.FC<WishCardProps> = ({
         <div className="mt-auto pt-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="text-2xl font-extrabold tracking-tight text-[#1F1D1A]">
-              {formatBRL(item.price)}
+              {item.kind === 'misc' && item.price <= 0 ? 'Preço a combinar' : formatBRL(item.price)}
             </span>
+            {item.shippingEstimate > 0 && <span className="w-full text-xs font-semibold text-[#6B655D]">Frete {formatBRL(item.shippingEstimate)} · Total {formatBRL(totalWithShipping(item))}</span>}
             <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${badgeToneClasses}`}>
               {budgetInfo.label}
             </span>

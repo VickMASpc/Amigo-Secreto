@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Check,
+  FileText,
   Edit3,
   ExternalLink,
   HeartHandshake,
@@ -17,6 +18,7 @@ import {
 import type { PublicUser, SubItem, UserCart, WishItem } from '../types';
 import { formatBRL, getBudgetBadge, isValidImageSrc } from '../utils/format';
 import { Avatar } from './Avatar';
+import { totalWithShipping } from '../utils/wishBundles';
 
 interface ItemDetailModalProps {
   item: WishItem | null;
@@ -56,7 +58,7 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
   const isOwn = item.ownerId === currentUserId;
   const canEdit = (isOwn && canEditOwn) || isAdmin;
   const canDelete = (isOwn && canEditOwn) || isAdmin;
-  const budgetInfo = getBudgetBadge(item.price, budget);
+  const budgetInfo = getBudgetBadge(totalWithShipping(item), budget);
 
   const fullInCart = cart.items.some((e) => e.itemId === item.id && !e.subItemId);
   const hasMainImage = isValidImageSrc(item.image) && !mainImgError;
@@ -101,6 +103,8 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                   <Layers className="h-3.5 w-3.5" />
                   Pacote com {item.subItems.length} itens
                 </>
+              ) : item.kind === 'misc' ? (
+                <><FileText className="h-3.5 w-3.5" /> Pedido livre</>
               ) : item.kind === 'digital' ? (
                 <>
                   <Sparkles className="h-3.5 w-3.5" />
@@ -145,6 +149,10 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                   className="max-h-76 w-auto rounded-xl object-contain"
                 />
               </div>
+            ) : item.kind === 'misc' ? (
+              <div className="flex h-44 flex-col items-center justify-center bg-[#F6EFE5] text-[#7A581B]">
+                <FileText className="h-12 w-12" /><span className="mt-2 text-sm font-bold">Pedido livre</span>
+              </div>
             ) : item.kind === 'digital' ? (
               <div className="flex h-44 flex-col items-center justify-center bg-gradient-to-br from-[#214E3E] to-[#193A2E] text-white">
                 <Sparkles className="h-12 w-12 text-[#E7C27D]" />
@@ -179,8 +187,9 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                   {item.kind === 'bundle' ? 'Total do combo' : 'Valor estimado'}
                 </div>
                 <div className="mt-0.5 text-3xl font-extrabold tracking-tight text-[#1F1D1A]">
-                  {formatBRL(item.price)}
+                  {item.kind === 'misc' && item.price <= 0 ? 'Preço a combinar' : formatBRL(item.price)}
                 </div>
+                {item.shippingEstimate > 0 && <p className="mt-1 text-xs text-[#6B655D]">Frete estimado: {formatBRL(item.shippingEstimate)} · Total: {formatBRL(totalWithShipping(item))}</p>}
               </div>
 
               <div className="text-right">

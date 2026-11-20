@@ -103,6 +103,19 @@ export const CartView: React.FC<CartViewProps> = ({
     [cart.items]
   );
 
+  const suggestedShipping = useMemo(() => {
+    const usedIds = new Set<string>();
+    return cart.items.reduce((sum, entry) => {
+      const parent = itemMap.get(entry.itemId);
+      const sub = entry.subItemId ? parent?.subItems.find((s) => s.id === entry.subItemId) : undefined;
+      const sourceId = sub?.sourceItemId;
+      const source = sourceId ? itemMap.get(sourceId) : undefined;
+      const id = sourceId || (entry.subItemId ? `${entry.itemId}/${entry.subItemId}` : entry.itemId);
+      if (usedIds.has(id)) return sum;
+      usedIds.add(id);
+      return sum + (source?.shippingEstimate || (!entry.subItemId ? parent?.shippingEstimate || 0 : 0));
+    }, 0);
+  }, [cart.items, itemMap]);
   const shippingValue = parsePriceInput(shippingText);
   const grandTotal = itemsSubtotal + shippingValue;
   const diff = grandTotal - budget;
@@ -244,6 +257,16 @@ export const CartView: React.FC<CartViewProps> = ({
             />
           </div>
         </div>
+        {suggestedShipping > 0 && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#FBF3E2] p-3 text-xs text-[#7A581B]">
+            <span>Frete informado nos pedidos: <strong>{formatBRL(suggestedShipping)}</strong>. Pode ser menor ao reunir compras no mesmo pedido.</span>
+            <button type="button" onClick={async () => {
+              setShippingText(priceToInputString(suggestedShipping));
+              try { await updateCartShipping(currentUserId, cart, suggestedShipping); }
+              catch { showToast('Não foi possível aplicar o frete sugerido.', 'error'); }
+            }} className="rounded-xl bg-white px-3 py-2 font-bold text-[#7A581B]">Usar como estimativa</button>
+          </div>
+        )}
       </section>
 
       {/* Lista de itens no carrinho */}

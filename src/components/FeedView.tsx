@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Eye,
+  FileText,
   EyeOff,
   Gift,
   HeartHandshake,
@@ -272,6 +273,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
                 { id: 'store', label: 'Loja', icon: Store },
                 { id: 'digital', label: 'Digital / Serviço', icon: Sparkles },
                 { id: 'bundle', label: 'Pacotes / Combos', icon: Layers },
+                { id: 'misc', label: 'Pedido livre / Outros', icon: FileText },
               ] as const
             ).map(({ id, label, icon: Icon }) => (
               <button
