@@ -177,6 +177,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
       setUrl(result.normalizedUrl);
       if (result.storeName && !storeName.trim()) setStoreName(result.storeName);
       if (result.title && !title.trim()) setTitle(result.title);
+      if (result.price !== undefined && !priceText.trim()) setPriceText(priceToInputString(result.price));
       if (result.image && !image.trim()) setImage(result.image);
       if (result.description && !description.trim()) {
         setDescription(result.description.slice(0, 220));
@@ -228,10 +229,11 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
         url: result.normalizedUrl,
         storeName: sub.storeName || result.storeName,
         title: sub.title || result.title,
+        priceText: sub.priceText || (result.price !== undefined ? priceToInputString(result.price) : ''),
         image: sub.image || result.image,
       });
       if (result.status === 'blocked') {
-        showToast('Esta loja bloqueou a leitura automática — preencha o nome manualmente.', 'info');
+        showToast('Não foi possível confirmar os dados da loja. Complete os campos que faltam.', 'info');
       } else {
         showToast('Dados do item do combo preenchidos!', 'success');
       }
