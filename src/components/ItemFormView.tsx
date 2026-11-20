@@ -507,168 +507,106 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
             </div>
           )}
 
-          {/* Construtor de Pacote / Combo */}
+
+          {/* Public shipping estimate, with independent private shipping in the buyer's cart. */}
+          {kind !== 'digital' && (
+            <div className="rounded-2xl border border-[#DFD7CA] bg-white p-4">
+              <div className="flex items-center gap-2 text-sm font-bold text-[#1F1D1A]">
+                <Truck className="h-4 w-4 text-[#214E3E]" /> Frete estimado (opcional)
+              </div>
+              <p className="mt-1 text-xs text-[#6B655D]">Informe o frete estimado. Quem comprar poderá ajustá-lo ao reunir entregas.</p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <span className="text-sm font-semibold text-[#6B655D]">R$</span>
+                <input type="text" inputMode="decimal" value={shippingText} onChange={(e) => setShippingText(e.target.value)} placeholder="0,00"
+                  className="w-28 rounded-xl border border-[#DFD7CA] bg-[#FAF7F2] px-3 py-2 text-sm font-semibold text-[#1F1D1A]" />
+                {kind === 'bundle' && suggestedBundleShipping > 0 && (
+                  <button type="button" onClick={() => setShippingText(priceToInputString(suggestedBundleShipping))}
+                    className="rounded-xl border border-[#DFD7CA] bg-[#FAF7F2] px-3 py-2 text-xs font-semibold text-[#214E3E]">
+                    Somar fretes individuais ({formatBRL(suggestedBundleShipping)})
+                  </button>
+                )}
+                {kind !== 'bundle' && (parsePriceInput(priceText) > 0 || shippingEstimate > 0) && (
+                  <span className="ml-auto text-xs font-bold text-[#214E3E]">Total previsto: {formatBRL(parsePriceInput(priceText) + shippingEstimate)}</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Choose existing products instead of duplicating them inside bundles. */}
           {kind === 'bundle' && (
             <div className="space-y-4">
-              {/* Barra de soma em tempo real */}
-              <div className="sticky top-[116px] z-10 rounded-2xl border border-[#E7E0D5] bg-[#FAF7F2]/95 p-4 shadow-sm backdrop-blur-sm sm:top-[104px]">
+              <div className="sticky top-[104px] z-10 rounded-2xl border border-[#E7E0D5] bg-[#FAF7F2]/95 p-4 shadow-sm backdrop-blur-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <span className="text-xs font-bold uppercase tracking-wider text-[#6B655D]">
-                      Soma do Combo
-                    </span>
-                    <div className="text-xl font-extrabold text-[#1F1D1A]">
-                      {formatBRL(bundleTotal)}{' '}
-                      <span className="text-sm font-semibold text-[#6B655D]">
-                        / {formatBRL(settings.budget)}
-                      </span>
-                    </div>
+                    <div className="text-xs font-bold uppercase text-[#6B655D]">Total do combo (com frete)</div>
+                    <div className="text-xl font-extrabold text-[#1F1D1A]">{formatBRL(bundleWithShipping)} <span className="text-sm font-medium text-[#6B655D]">/ {formatBRL(settings.budget)}</span></div>
+                    <div className="text-xs text-[#6B655D]">Produtos: {formatBRL(bundleTotal)} · Frete: {formatBRL(shippingEstimate)}</div>
                   </div>
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-bold ${
-                      bundleDiff > 0.01
-                        ? 'bg-[#B83B35]/12 text-[#992D28]'
-                        : Math.abs(bundleDiff) <= 15 && bundleTotal > 0
-                          ? 'bg-[#214E3E]/15 text-[#214E3E]'
-                          : 'bg-white text-[#6B655D] ring-1 ring-[#DFD7CA]'
-                    }`}
-                  >
-                    {bundleDiff > 0.01
-                      ? `Passou ${formatBRL(bundleDiff)}`
-                      : bundleDiff === 0 && bundleTotal > 0
-                        ? 'Na medida!'
-                        : `Faltam ${formatBRL(Math.max(0, settings.budget - bundleTotal))}`}
+                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${bundleDiff > 0.01 ? 'bg-[#B83B35]/12 text-[#992D28]' : 'bg-[#E6F0EC] text-[#214E3E]'}`}>
+                    {bundleDiff > 0.01 ? `Passou ${formatBRL(bundleDiff)}` : `Restam ${formatBRL(Math.max(0, -bundleDiff))}`}
                   </span>
                 </div>
-
-                <div className="mt-2.5 h-2.5 w-full overflow-hidden rounded-full bg-[#E7E0D5]">
-                  <div
-                    className={`h-full rounded-full transition-all duration-300 ${
-                      bundleDiff > 0.01 ? 'bg-[#B83B35]' : 'bg-[#214E3E]'
-                    }`}
-                    style={{ width: `${bundleProgress}%` }}
-                  />
+                <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-[#E7E0D5]">
+                  <div className={`h-full ${bundleDiff > 0.01 ? 'bg-[#B83B35]' : 'bg-[#214E3E]'}`} style={{width:`${bundleProgress}%`}} />
                 </div>
               </div>
 
-              {/* Lista de Sub-itens */}
-              <div className="space-y-3">
-                {subItems.map((sub, idx) => (
-                  <div
-                    key={sub.id}
-                    className="rounded-2xl border border-[#E7E0D5] bg-[#FAF7F2] p-4"
-                  >
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#1F1D1A]">
-                        Item #{idx + 1} do combo
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <div className="inline-flex rounded-xl bg-white p-0.5 ring-1 ring-[#E7E0D5]">
-                          <button
-                            type="button"
-                            onClick={() => updateSubItem(sub.id, { kind: 'store' })}
-                            className={`rounded-lg px-2.5 py-1 text-[11px] font-bold ${
-                              sub.kind === 'store'
-                                ? 'bg-[#1F1D1A] text-white'
-                                : 'text-[#6B655D]'
-                            }`}
-                          >
-                            Loja
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => updateSubItem(sub.id, { kind: 'digital' })}
-                            className={`rounded-lg px-2.5 py-1 text-[11px] font-bold ${
-                              sub.kind === 'digital'
-                                ? 'bg-[#214E3E] text-white'
-                                : 'text-[#6B655D]'
-                            }`}
-                          >
-                            Digital
-                          </button>
-                        </div>
-
-                        {subItems.length > 2 && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setSubItems((prev) => prev.filter((item) => item.id !== sub.id))
-                            }
-                            aria-label="Remover item do combo"
-                            className="rounded-lg p-1.5 text-[#B83B35] hover:bg-[#FFF5F5]"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                      <div className="sm:col-span-2">
-                        <input
-                          type="text"
-                          value={sub.title}
-                          onChange={(e) => updateSubItem(sub.id, { title: e.target.value })}
-                          placeholder="Nome do item (ex: Livro Hábitos Atômicos)"
-                          className="w-full rounded-xl border border-[#DFD7CA] bg-white px-3.5 py-2.5 text-sm text-[#1F1D1A] outline-none focus:border-[#B83B35]"
-                        />
-                      </div>
-                      <div className="relative">
-                        <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-xs font-bold text-[#6B655D]">
-                          R$
-                        </span>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={sub.priceText}
-                          onChange={(e) => updateSubItem(sub.id, { priceText: e.target.value })}
-                          placeholder="50,00"
-                          className="w-full rounded-xl border border-[#DFD7CA] bg-white py-2.5 pr-3 pl-9 text-sm font-bold text-[#1F1D1A] outline-none focus:border-[#B83B35]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-2.5 flex flex-col gap-2 sm:flex-row">
-                      <label className="inline-flex cursor-pointer items-center justify-center gap-1 rounded-xl border border-[#DFD7CA] bg-white px-3 py-2 text-xs font-semibold text-[#1F1D1A] hover:bg-[#EFE8DB]">
-                        <Upload className="h-3.5 w-3.5 text-[#B83B35]" />
-                        {sub.uploadingImg ? 'Analisando print...' : sub.image ? 'Importar outro print' : 'Importar print'}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => handleSubItemImageUpload(sub.id, e)}
-                          disabled={sub.uploadingImg}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-
-                    <div className="mt-2.5 flex items-center gap-2">
-                      {isValidImageSrc(sub.image) && (
-                        <img
-                          src={sub.image}
-                          alt=""
-                          className="h-10 w-10 shrink-0 rounded-lg border border-[#DFD7CA] object-cover"
-                        />
-                      )}
-                      <input
-                        type="text"
-                        value={sub.notes}
-                        onChange={(e) => updateSubItem(sub.id, { notes: e.target.value })}
-                        placeholder="Observação rápida (ex: cor, loja ou como comprar)"
-                        className="w-full rounded-xl border border-[#DFD7CA] bg-white px-3.5 py-2 text-xs text-[#1F1D1A] outline-none focus:border-[#B83B35]"
-                      />
-                    </div>
+              <div className="rounded-2xl border border-[#E7E0D5] bg-[#FAF7F2] p-4">
+                <h2 className="text-sm font-bold text-[#1F1D1A]">Escolha produtos da sua lista</h2>
+                <p className="mt-1 text-xs text-[#6B655D]">Primeiro salve seus desejos. Depois selecione pelo menos dois deles aqui. Alterações nos produtos originais aparecem no combo.</p>
+                <div className="relative mt-3">
+                  <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 text-[#8B8275]" />
+                  <input type="search" value={bundleSearch} onChange={(e) => setBundleSearch(e.target.value)}
+                    placeholder="Procurar nos meus desejos..." className="w-full rounded-xl border border-[#DFD7CA] bg-white py-2.5 pr-3 pl-9 text-sm" />
+                </div>
+                {eligibleProducts.length === 0 ? (
+                  <p className="mt-4 rounded-xl bg-white p-4 text-sm text-[#6B655D]">Você ainda não tem produtos cadastrados. Salve alguns desejos de Loja, Digital ou Pedido livre antes de montar um combo.</p>
+                ) : visibleProducts.length === 0 ? (
+                  <p className="mt-4 text-xs text-[#6B655D]">Nenhum desejo encontrado nesta busca.</p>
+                ) : (
+                  <div className="mt-3 max-h-80 space-y-2 overflow-y-auto">
+                    {visibleProducts.map((product) => {
+                      const selected = selectedProductIds.includes(product.id);
+                      return (
+                        <button type="button" key={product.id}
+                          onClick={() => setSelectedProductIds((prev) => prev.includes(product.id) ? prev.filter((id) => id !== product.id) : [...prev, product.id])}
+                          className={`flex w-full items-center gap-3 rounded-xl border p-2.5 text-left ${selected ? 'border-[#214E3E] bg-[#E6F0EC]' : 'border-[#E7E0D5] bg-white'}`}
+                          aria-pressed={selected}>
+                          {isValidImageSrc(product.image) ? <img src={product.image} alt="" className="h-12 w-12 shrink-0 rounded-lg object-contain" /> :
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#F4EFE6]"><Store className="h-5 w-5 text-[#8B8275]" /></div>}
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold text-[#1F1D1A]">{product.title}</span>
+                            <span className="block text-xs text-[#6B655D]">{product.price ? formatBRL(product.price) : 'Preço a combinar'}{product.shippingEstimate > 0 ? ` · frete ${formatBRL(product.shippingEstimate)}` : ''}</span>
+                          </span>
+                          {selected ? <Check className="h-5 w-5 shrink-0 text-[#214E3E]" /> : <Plus className="h-5 w-5 shrink-0 text-[#8B8275]" />}
+                        </button>
+                      );
+                    })}
                   </div>
-                ))}
+                )}
+              </div>
 
-                <button
-                  type="button"
-                  onClick={() => setSubItems((prev) => [...prev, createEmptySubItem()])}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[#C8963E] bg-[#FBF3E2]/60 py-3 text-sm font-bold text-[#8C6520] transition hover:bg-[#FBF3E2]"
-                >
-                  <Plus className="h-4 w-4" />
-                  Adicionar mais um item ao combo
-                </button>
+              <div className="rounded-2xl border border-[#E7E0D5] bg-white p-4">
+                <h3 className="text-sm font-bold text-[#1F1D1A]">Itens selecionados ({selectedProducts.length + legacyBundleItems.length})</h3>
+                <div className="mt-3 space-y-2">
+                  {selectedProducts.map((product) => (
+                    <div key={product.id} className="flex items-center gap-2 rounded-xl bg-[#FAF7F2] px-3 py-2 text-sm">
+                      <span className="min-w-0 flex-1 truncate">{product.title}</span>
+                      <strong className="shrink-0">{formatBRL(product.price)}</strong>
+                      <button type="button" aria-label={`Retirar ${product.title}`} onClick={() => setSelectedProductIds((prev) => prev.filter((id) => id !== product.id))}
+                        className="p-1 text-[#B83B35]"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  ))}
+                  {legacyBundleItems.map((sub) => (
+                    <div key={sub.id} className="flex items-center gap-2 rounded-xl bg-[#FBF3E2] px-3 py-2 text-sm">
+                      <span className="min-w-0 flex-1 truncate">{sub.title} <small className="text-[#7A581B]">(item de combo antigo)</small></span>
+                      <strong>{formatBRL(sub.price)}</strong>
+                      <button type="button" aria-label={`Retirar ${sub.title}`} onClick={() => setLegacyBundleItems((prev) => prev.filter((i) => i.id !== sub.id))}
+                        className="p-1 text-[#B83B35]"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  ))}
+                  {selectedProducts.length + legacyBundleItems.length === 0 && <p className="text-xs text-[#6B655D]">Selecione os produtos acima.</p>}
+                </div>
               </div>
             </div>
           )}
