@@ -27,6 +27,7 @@ import type {
   EventSettings,
   ItemKind,
   ItemPriority,
+  PublicUser,
   SubItem,
   WishItem,
 } from '../types';
@@ -47,6 +48,7 @@ interface ItemFormViewProps {
   canManageItems: boolean;
   editingItem: WishItem | null;
   availableItems: WishItem[];
+  familyMembers: PublicUser[];
   onSaved: () => void;
   onCancel: () => void;
   onGoToAdmin?: () => void;
@@ -58,6 +60,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
   canManageItems,
   editingItem,
   availableItems,
+  familyMembers,
   onSaved,
   onCancel,
   onGoToAdmin,
@@ -89,10 +92,11 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
       ? editingItem.subItems.filter((sub) => !sub.sourceItemId || !availableItems.some((item) => item.id === sub.sourceItemId))
       : []
   );
-  const eligibleProducts = availableItems.filter((item) => item.ownerId === currentUser.id && item.kind !== 'bundle' && item.id !== editingItem?.id);
+  const eligibleProducts = availableItems.filter((item) => item.kind !== 'bundle' && item.id !== editingItem?.id);
+  const getOwnerName = (ownerId: string) => familyMembers.find((person) => person.id === ownerId)?.displayName || ownerId;
   const selectedProducts = selectedProductIds.map((id) => eligibleProducts.find((item) => item.id === id)).filter((item): item is WishItem => Boolean(item));
   const visibleProducts = eligibleProducts.filter((item) =>
-    `${item.title} ${item.storeName} ${item.description}`.toLocaleLowerCase('pt-BR').includes(bundleSearch.toLocaleLowerCase('pt-BR').trim())
+    `${item.title} ${item.storeName} ${item.description} ${getOwnerName(item.ownerId)}`.toLocaleLowerCase('pt-BR').includes(bundleSearch.toLocaleLowerCase('pt-BR').trim())
   );
   const shippingEstimate = parsePriceInput(shippingText);
   const suggestedBundleShipping = selectedProducts.reduce((sum, item) => sum + item.shippingEstimate, 0);
@@ -197,7 +201,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
 
     if (kind === 'bundle') {
       if (legacyBundleItems.length + selectedProducts.length < 2) {
-        showToast('Selecione pelo menos dois desejos que já estão na sua lista.', 'error');
+        showToast('Selecione pelo menos dois desejos publicados pela família.', 'error');
         return;
       }
       parsedSubItems = [
@@ -205,6 +209,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
         ...selectedProducts.map((item): SubItem => ({
           id: item.id,
           sourceItemId: item.id,
+          sourceOwnerId: item.ownerId,
           title: item.title,
           price: item.price,
           kind: item.kind === 'misc' ? 'misc' : item.kind === 'digital' ? 'digital' : 'store',
@@ -552,15 +557,15 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
               </div>
 
               <div className="rounded-2xl border border-[#E7E0D5] bg-[#FAF7F2] p-4">
-                <h2 className="text-sm font-bold text-[#1F1D1A]">Escolha produtos da sua lista</h2>
-                <p className="mt-1 text-xs text-[#6B655D]">Primeiro salve seus desejos. Depois selecione pelo menos dois deles aqui. Alterações nos produtos originais aparecem no combo.</p>
+                <h2 className="text-sm font-bold text-[#1F1D1A]">Monte com desejos de qualquer pessoa</h2>
+                <p className="mt-1 text-xs text-[#6B655D]">Misture presentes de toda a família — até um combo só de desejos dos outros. Cada item continua ligado à sua lista original, com preço e foto atualizados.</p>
                 <div className="relative mt-3">
                   <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 text-[#8B8275]" />
                   <input type="search" value={bundleSearch} onChange={(e) => setBundleSearch(e.target.value)}
-                    placeholder="Procurar nos meus desejos..." className="w-full rounded-xl border border-[#DFD7CA] bg-white py-2.5 pr-3 pl-9 text-sm" />
+                    placeholder="Buscar produto ou pessoa..." className="w-full rounded-xl border border-[#DFD7CA] bg-white py-2.5 pr-3 pl-9 text-sm" />
                 </div>
                 {eligibleProducts.length === 0 ? (
-                  <p className="mt-4 rounded-xl bg-white p-4 text-sm text-[#6B655D]">Você ainda não tem produtos cadastrados. Salve alguns desejos de Loja, Digital ou Pedido livre antes de montar um combo.</p>
+                  <p className="mt-4 rounded-xl bg-white p-4 text-sm text-[#6B655D]">A família ainda não cadastrou desejos individuais. Adicione alguns produtos ou pedidos livres antes de montar um combo.</p>
                 ) : visibleProducts.length === 0 ? (
                   <p className="mt-4 text-xs text-[#6B655D]">Nenhum desejo encontrado nesta busca.</p>
                 ) : (
@@ -576,6 +581,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
                             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#F4EFE6]"><Store className="h-5 w-5 text-[#8B8275]" /></div>}
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-semibold text-[#1F1D1A]">{product.title}</span>
+                            <span className="block text-xs font-bold text-[#214E3E]">Da lista de {getOwnerName(product.ownerId)}{product.ownerId === currentUser.id ? ' (você)' : ''}</span>
                             <span className="block text-xs text-[#6B655D]">{product.price ? formatBRL(product.price) : 'Preço a combinar'}{product.shippingEstimate > 0 ? ` · frete ${formatBRL(product.shippingEstimate)}` : ''}</span>
                           </span>
                           {selected ? <Check className="h-5 w-5 shrink-0 text-[#214E3E]" /> : <Plus className="h-5 w-5 shrink-0 text-[#8B8275]" />}
@@ -591,7 +597,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
                 <div className="mt-3 space-y-2">
                   {selectedProducts.map((product) => (
                     <div key={product.id} className="flex items-center gap-2 rounded-xl bg-[#FAF7F2] px-3 py-2 text-sm">
-                      <span className="min-w-0 flex-1 truncate">{product.title}</span>
+                      <span className="min-w-0 flex-1 truncate">{product.title} <span className="text-xs text-[#6B655D]">· {getOwnerName(product.ownerId)}</span></span>
                       <strong className="shrink-0">{formatBRL(product.price)}</strong>
                       <button type="button" aria-label={`Retirar ${product.title}`} onClick={() => setSelectedProductIds((prev) => prev.filter((id) => id !== product.id))}
                         className="p-1 text-[#B83B35]"><Trash2 className="h-4 w-4" /></button>

@@ -425,7 +425,8 @@ function AppContent() {
             settings={settings}
             canManageItems={canManageOwnItems}
             editingItem={editingItem}
-            availableItems={ownItems}
+            availableItems={effectiveItems}
+            familyMembers={publicUsers}
             onSaved={() => {
               setEditingItem(null);
               handleSelectTab('feed');
@@ -484,6 +485,7 @@ function AppContent() {
         key={detailItem?.id ?? 'closed'}
         item={detailItem}
         owner={detailItem ? userMap.get(detailItem.ownerId) : undefined}
+        familyMembers={publicUsers}
         currentUserId={currentUser.id}
         isAdmin={currentUser.role === 'admin'}
         canEditOwn={canManageOwnItems}

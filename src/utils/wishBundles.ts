@@ -7,9 +7,10 @@ export function resolveLinkedBundles(items: WishItem[]): WishItem[] {
     if (item.kind !== 'bundle') return item;
     const subItems: SubItem[] = item.subItems.map((sub) => {
       const source = sub.sourceItemId ? index.get(sub.sourceItemId) : null;
-      if (!source || source.ownerId !== item.ownerId || source.kind === 'bundle') return sub;
+      if (!source || source.kind === 'bundle') return sub;
       return {
         ...sub,
+        sourceOwnerId: source.ownerId,
         title: source.title,
         price: source.price,
         kind: source.kind === 'misc' ? 'misc' : source.kind === 'digital' ? 'digital' : 'store',

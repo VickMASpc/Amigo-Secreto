@@ -23,6 +23,7 @@ import { totalWithShipping } from '../utils/wishBundles';
 interface ItemDetailModalProps {
   item: WishItem | null;
   owner: PublicUser | undefined;
+  familyMembers: PublicUser[];
   currentUserId: string;
   isAdmin: boolean;
   canEditOwn: boolean;
@@ -39,6 +40,7 @@ interface ItemDetailModalProps {
 export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
   item,
   owner,
+  familyMembers,
   currentUserId,
   isAdmin,
   canEditOwn,
@@ -291,6 +293,7 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                               <h4 className="mt-1 text-sm font-bold text-[#1F1D1A]">
                                 {sub.title}
                               </h4>
+                              {sub.sourceOwnerId && <p className="mt-1 text-xs font-medium text-[#214E3E]">Da lista de {familyMembers.find((person) => person.id === sub.sourceOwnerId)?.displayName || 'outro familiar'}</p>}
                             </div>
                             <span className="text-base font-extrabold text-[#1F1D1A]">
                               {formatBRL(sub.price)}

@@ -136,6 +136,7 @@ function mapWishItem(id: string, data: Record<string, unknown>): WishItem {
   const subItems: SubItem[] = rawSubs.map((s: Record<string, unknown>, idx) => ({
     id: typeof s.id === 'string' ? s.id : `sub-${idx}`,
     ...(typeof s.sourceItemId === 'string' ? { sourceItemId: s.sourceItemId } : {}),
+    ...(typeof s.sourceOwnerId === 'string' && PARTICIPANTS.some((p) => p.id === s.sourceOwnerId) ? { sourceOwnerId: s.sourceOwnerId as ParticipantId } : {}),
     title: typeof s.title === 'string' ? s.title : '',
     price: typeof s.price === 'number' && Number.isFinite(s.price) ? s.price : 0,
     kind: s.kind === 'digital' ? 'digital' : s.kind === 'misc' ? 'misc' : 'store',

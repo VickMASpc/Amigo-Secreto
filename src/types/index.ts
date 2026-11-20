@@ -57,6 +57,8 @@ export interface SubItem {
   id: string;
   /** References an existing wishlist product. Remaining fields are a snapshot. */
   sourceItemId?: string;
+  /** Person whose public wish this entry references. */
+  sourceOwnerId?: ParticipantId;
   title: string;
   price: number;
   kind: SubItemKind;
