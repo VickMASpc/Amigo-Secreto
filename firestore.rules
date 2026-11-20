@@ -1,0 +1,86 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // REGRAS DO AMIGO SECRETO DA FAMÍLIA (MODELO SPARK SEM CLOUD FUNCTIONS)
+    // =========================================================================
+    // Este app utiliza autenticação sem senha via QR Code / accessToken por
+    // participante (sem Firebase Auth tradicional, para máxima simplicidade da
+    // família no plano Spark gratuito).
+    //
+    // Como os tokens de acesso vivem nos documentos `users/{userId}`, estas
+    // regras validam a estrutura das coleções e limitam os IDs permitidos aos
+    // 4 membros da família, impedindo escrita em coleções arbitrárias ou
+    // exclusão acidental de perfis e configurações.
+    //
+    // AVISO DE SEGURANÇA (Para endurecer no futuro se desejar):
+    // Sem Firebase Auth, o Firestore Rules não valida o `accessToken` de forma
+    // criptográfica por usuário autenticado. Se um dia quiser proteção estrita
+    // contra alguém inspecionando requisições de rede no DevTools:
+    //   1. Ative Anonymous Auth no Firebase Console;
+    //   2. Vincule `authUid` no documento do usuário na primeira entrada;
+    //   3. Exija `request.auth != null && resource.data.authUid == request.auth.uid`
+    //      para leitura/escrita em `carts/{userId}` e edição de `users/{userId}`.
+    // =========================================================================
+
+    function isFamilyMemberId(userId) {
+      return userId in ['victor', 'wellington', 'rosangela', 'bianca'];
+    }
+
+    // Configurações do evento (orçamento, data limite, liberação manual, hash do PIN)
+    match /settings/event {
+      allow read: if true;
+      allow create: if request.resource.data.initialized == true
+                    && request.resource.data.budget is number
+                    && request.resource.data.budget > 0;
+      allow update: if request.resource.data.initialized == true
+                    && request.resource.data.budget is number
+                    && request.resource.data.budget > 0;
+      allow delete: if false;
+    }
+
+    // Perfis dos 4 participantes fixos
+    match /users/{userId} {
+      allow read: if isFamilyMemberId(userId);
+      allow create: if isFamilyMemberId(userId)
+                    && request.resource.data.id == userId
+                    && request.resource.data.accessToken is string
+                    && request.resource.data.accessToken.size() >= 16;
+      allow update: if isFamilyMemberId(userId)
+                    && request.resource.data.id == userId
+                    && request.resource.data.role == resource.data.role
+                    && request.resource.data.accessToken is string
+                    && request.resource.data.accessToken.size() >= 16;
+      allow delete: if false;
+    }
+
+    // Feed de desejos (itens de loja, digitais e combos)
+    match /items/{itemId} {
+      allow read: if true;
+      allow create, update: if isFamilyMemberId(request.resource.data.ownerId)
+                            && request.resource.data.kind in ['store', 'digital', 'bundle']
+                            && request.resource.data.title is string
+                            && request.resource.data.title.size() > 0
+                            && request.resource.data.price is number
+                            && request.resource.data.price >= 0;
+      allow delete: if true;
+    }
+
+    // Carrinhos privados de planejamento por participante
+    match /carts/{userId} {
+      allow read: if isFamilyMemberId(userId);
+      allow create, update: if isFamilyMemberId(userId)
+                            && request.resource.data.items is list
+                            && request.resource.data.shippingEstimate is number
+                            && request.resource.data.shippingEstimate >= 0;
+      allow delete: if false;
+    }
+
+    // Bloqueia qualquer outra coleção não prevista
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
