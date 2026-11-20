@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertCircle, CheckCircle2, ImagePlus, Loader2, Sparkles, Trash2, Upload } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ImagePlus, Loader2, Sparkles, Trash2 } from 'lucide-react';
 import { compressImageFile } from '../utils/imageCompress';
 import { analyzeScreenshots, cropProductPreview, type ScreenshotProduct } from '../utils/screenshotImport';
 

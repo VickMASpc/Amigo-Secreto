@@ -133,3 +133,25 @@ A rota `/screenshot` usa CORS e limites por IP e por localização Cloudflare, q
 - **Hospedagem:** o workflow GitHub Actions gera `docs/` automaticamente na branch main usando os dados públicos do Firebase Web App, já presentes no `.env.example`. O Pages continua configurado para hospedar `main/docs`.
 
 - **Combos cruzados:** é intencional permitir um combo com desejos de participantes diferentes, exibindo a origem de cada item. Só informações de desejos publicamente visíveis são usadas; dados do sorteio e dos carrinhos privados permanecem fora do seletor.
+
+## Importação de 1 a 4 prints, um produto, uma chamada Gemini (v8)
+O importador permite selecionar de **1 a 4 capturas da mesma página de produto** (podem ser adicionadas em rodadas), pré-visualizar e remover cada uma antes de analisar. O botão *Analisar prints* faz **uma única chamada HTTP ao Worker**, que chama **somente `gemini-3.5-flash-lite` uma vez** com `thinkingLevel: MEDIUM` e sem `maxOutputTokens`. A chave secreta fica no Worker. As capturas são enviadas ao Google Gemini apenas durante o processamento; somente o recorte comprimido é salvo no Firestore.
+
+### Guia de captura no próprio formulário
+Escolha Shopee, SHEIN, Temu, Mercado Livre, TikTok Shop ou Amazon para ver os passos específicos. Envie primeiro a **foto grande**, depois um print do **preço e título/variações**, depois **frete e entrega** se necessário. Um print só de frete não serve de imagem principal. Evite endereços e dados pessoais.
+
+### Interpretação
+Preços com centavos em fonte pequena, parcelamento, Pix, preço riscado, cupom por seguir loja, desconto NuPay/Itaú e promoção multi-item são distinguidos. Só o preço principal é preenchido; preços condicionais e entrega condicional geram avisos para confirmação manual. O modelo extrai a variação selecionada e decide em qual captura está a foto principal.
+
+### Recorte
+O modelo retorna índice da imagem e retângulo `x/y/width/height` normalizado da região fotográfica, excluindo barras de navegação, busca, preço e nome. A validação descarta caixas ilegais/minúsculas. O recorte é feito localmente e tem **limpeza de bordas uniformes** conservadora (limiar 14, máximo 12% por lado). Caso o modelo detecte uma foto principal mas omita uma caixa válida, aplica-se um enquadramento aproximado específico para a loja (com alerta). Prints só de frete/variações não são transformados em capa. A capa passa pela compressão WebP de até 145 KB antes de salvar no Firestore, preservando o formato e campos existentes.
+
+### Ativar o novo Worker
+Após atualizar o código com `git pull --ff-only origin main`, execute:
+
+```powershell
+cd "C:\Users\Victor\Downloads\Amigo Secreto\worker"
+npx wrangler deploy
+```
+
+Não é necessário informar `GEMINI_API_KEY` novamente se já foi gravada como secret no Cloudflare. A versão do Worker retorna `maxScreenshotCount:4` no endpoint raiz de status.

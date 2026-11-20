@@ -7,7 +7,7 @@ async function boundedText(res){const reader=res.body?.getReader();if(!reader)re
 export default {async fetch(request,env){
   const o=request.headers.get('Origin'), headers={'Access-Control-Allow-Origin':originAllowed(o)?o:'null','Vary':'Origin','Access-Control-Allow-Methods':'GET, POST, OPTIONS','Access-Control-Allow-Headers':'Content-Type','Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'};
   const reply=(j,status=200)=>new Response(JSON.stringify(j),{status,headers});
-  if(request.method==='GET'&&new URL(request.url).pathname==='/'&&!new URL(request.url).searchParams.has('url'))return reply({ok:true,service:'amigo-secreto-import',version:7,browser:!!env.BROWSER,screenshot:!!env.GEMINI_API_KEY,model:MODEL});
+  if(request.method==='GET'&&new URL(request.url).pathname==='/'&&!new URL(request.url).searchParams.has('url'))return reply({ok:true,service:'amigo-secreto-import',version:8,browser:!!env.BROWSER,screenshot:!!env.GEMINI_API_KEY,model:MODEL,maxScreenshotCount:4,thinkingLevel:'MEDIUM'});
   if(!originAllowed(o))return reply({error:'Origem não autorizada'},403);
   if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
   if(new URL(request.url).pathname==='/screenshot'){if(request.method!=='POST')return reply({error:'Use POST'},405);try{return await analyze(request,env,reply);}catch{return reply({error:'Falha no serviço de análise de prints.'},500);}}

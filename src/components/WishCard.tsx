@@ -78,7 +78,7 @@ export const WishCard: React.FC<WishCardProps> = ({
             alt={item.title}
             onError={() => setImgError(true)}
             loading="lazy"
-            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+            className="h-full w-full bg-white object-contain p-2 transition duration-300 group-hover:scale-[1.03]"
           />
         ) : item.kind === 'bundle' && subImages.length > 0 ? (
           <div className="grid h-full w-full grid-cols-2 gap-0.5 bg-[#E7E0D5]">
