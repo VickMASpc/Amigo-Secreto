@@ -142,24 +142,39 @@ export function fromHTML(markup,url) {
   const itempropPrice=doc.querySelector('[itemprop="price"]');
   const scopedPrice=currencyPrice(itempropPrice?.getAttribute('content')||itempropPrice?.textContent,curr);
   const title=selected?.title||pageH1||titleOf(pageTitle);
+  if(!selected&&!pageH1&&!meta('og:type').includes('product')&&!priceTag&&!visiblePrice(doc,url))return {};
   if(!title)return {};
-  return {title,description:selected?.description||clean(meta('og:description','description','twitter:description')),image:selected?.image||imgOf(meta('og:image','twitter:image','og:image:secure_url'),url),price:selected?.price??priceTag??scopedPrice,score:selected?.score|| (selected?90:60)};
+  return {title,description:selected?.description||clean(meta('og:description','description','twitter:description')),image:selected?.image||imgOf(meta('og:image','twitter:image','og:image:secure_url'),url),price:selected?.price??priceTag??visiblePrice(doc,url)??(selected?scopedPrice:undefined),score:selected?.score|| (selected?90:60)};
 }
 const timeout=async (url,ms=12000,opts={})=>{
   const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),ms);
-  try {const response=await fetch(url,{...opts,signal:controller.signal,credentials:'omit'});if(!response.ok)throw Error('HTTP '+response.status); const body=await response.text();if(body.length>6500000)throw Error('resposta muito grande');return {body,response};}
+  try {const response=await fetch(url,{...opts,signal:controller.signal,credentials:'omit'});const body=await response.text();if(!response.ok){let detail='';try{const j=JSON.parse(body);detail=typeof j.error==='string'?j.error:typeof j.message==='string'?j.message:'';}catch{}throw Error('HTTP '+response.status+(detail?' — '+detail.slice(0,200):''));}if(body.length>6500000)throw Error('resposta muito grande');return {body,response};}
   finally{clearTimeout(timer);}
 };
 const fromJSON=(d,url)=>({title:titleOf(d.title||d.name),description:clean(d.description),image:imgOf(d.image?.url||d.image||d.images?.[0]||d.pictures?.[0]?.secure_url||d.thumbnail,url),price:currencyPrice(d.price?.amount??d.price,d.currency_id||d.currency||d.priceCurrency),url:safeUrl(d.url,url),score:45});
+function visiblePrice(doc,url) {
+ const selectors={'Shopee':['[data-testid="price"]','[data-testid="product-price"]','[class*="product-price"]'],'SHEIN':['.product-intro__head-price .from','[class*="product-intro__head-price"] .from','[class*="product-intro__head-price"] [class*="sale"]','[class*="sale-price"]'],'Mercado Livre':['.ui-pdp-price__second-line .andes-money-amount'],'TikTok Shop':['[data-testid="product-price"]','[class*="product-price"]','[class*="sale-price"]']}[storeOf(url)]||[];
+ for(const selector of selectors){
+  const prices=[];
+  for(const el of doc.querySelectorAll(selector)){
+   if(el.closest('s,del,strike,[class*="original-price"],[class*="old-price"]'))continue;
+   let p;const fraction=el.querySelector('.andes-money-amount__fraction'),cents=el.querySelector('.andes-money-amount__cents');
+   if(fraction)p=priceOf(fraction.textContent.trim()+','+(cents?.textContent.trim()||'00'));
+   else {const t=(el.textContent||'').trim(), hits=[...t.matchAll(/R\$\s*(\d+(?:\.\d{3})*(?:,\d{2})?)/g)].map(m=>priceOf(m[1])).filter(Boolean);if(hits.length===1&&!/parcel|a partir|frete|cupom/i.test(t))p=hits[0];}
+   if(p)prices.push(p);
+  }
+  const unique=[...new Set(prices)];if(unique.length===1)return unique[0];
+ }
+}
 const DEFAULT_WORKER = 'https://amigo-secreto-import.vitruidor.workers.dev';
 function getWorker() {try{return safeUrl(localStorage.getItem('amigo-product-worker'))||DEFAULT_WORKER;}catch{return DEFAULT_WORKER;}}
-function cacheKey(url){return 'product-import-v5:'+url;}
+function cacheKey(url){return 'product-import-v6:'+url;}
 function cacheGet(url){try{const v=JSON.parse(sessionStorage.getItem(cacheKey(url)));return v&&Date.now()-v.time<300000?v.value:null;}catch{return null;}}
 function cachePut(url,value){try{sessionStorage.setItem(cacheKey(url),JSON.stringify({time:Date.now(),value}));}catch{}}
 export async function importProduct(raw,knownStore='') {
   const normalizedUrl=normalize(raw), cached=cacheGet(normalizedUrl);if(cached)return cached;
   const options=candidates(normalizedUrl), diagnostics=[], entries=[];
-  const add=async (source,fn)=>{try{const p=await fn();if(p&&(p.title||p.image||p.price)){entries.push({...p,source});diagnostics.push(source+': dados encontrados');}else diagnostics.push(source+': sem dados de produto');}catch(e){diagnostics.push(source+': '+(e.name==='AbortError'?'tempo limite':e.message||'falhou'));}};
+  const add=async (source,fn)=>{try{const p=await fn();if(p&&(p.title||p.image||p.price)){entries.push({...p,source});diagnostics.push(source+': '+[p.title?'nome':'',p.price?'preço R$ '+p.price:'',p.image?'foto':''].filter(Boolean).join(', ')+(p.title?' ['+p.title.slice(0,100)+']':'')+(p.url?' | URL '+p.url:''));}else diagnostics.push(source+': sem dados de produto');}catch(e){diagnostics.push(source+': '+(e.name==='AbortError'?'tempo limite':e.message||'falhou'));}};
   const shared=fromText(raw,normalizedUrl);if(raw.trim()!==normalizedUrl&&(shared.title||shared.price))entries.push({...shared,score:35,source:'Texto compartilhado'});
   const target=options[0], canonical=options[1]||target, worker=stores.some(([r])=>r.test(new URL(target).hostname))?getWorker():'';
   const tasks=[
@@ -174,18 +189,20 @@ export async function importProduct(raw,knownStore='') {
   if(ml&&storeOf(target)==='Mercado Livre')tasks.push(add('API Mercado Livre',async()=>{const {body}=await timeout('https://api.mercadolibre.com/items/'+ml,9000);const j=JSON.parse(body);if(j.id!==ml)throw Error('identificador diferente');return {...fromJSON(j,target),score:100};}));
   await Promise.allSettled(tasks);
   // Try alternative canonical URL only when initial sources are incomplete.
-  const usable=()=>entries.some(e=>e.title)&&entries.some(e=>e.price)&&entries.some(e=>e.image);
+  const usable=()=>entries.some(e=>e.title&&e.price&&e.image&&(e.score||0)>=60);
   if(!usable()&&canonical!==target)await add('Jina URL alternativa',async()=>{const {body}=await timeout('https://r.jina.ai/'+canonical,12000);return {...fromText(body,canonical),score:25};});
-  if(!usable()&&worker)await add('Worker navegador',async()=>{const u=new URL(worker);u.searchParams.set('url',target);u.searchParams.set('render','1');const {body}=await timeout(u.href,25000);const j=JSON.parse(body);return {...fromHTML(j.html,j.url||target),url:j.url};});
+  const resolved=entries.find(e=>e.url&&storeOf(e.url)===storeOf(target)&&e.url!==target)?.url||canonical;
+  if(!usable()&&worker)await add('Worker navegador',async()=>{const u=new URL(worker);u.searchParams.set('url',resolved);u.searchParams.set('render','1');const {body}=await timeout(u.href,25000);const j=JSON.parse(body);return {...fromHTML(j.html,j.url||target),url:j.url};});
   entries.sort((a,b)=>(b.score||0)-(a.score||0));
-  const top=entries.find(e=>e.title), compatible=entries.filter(e=>!top||e===top||(e.title&&sameTitle(e.title,top.title)));
+  const top=entries.find(e=>e.title&&e.price&&e.image&&(e.score||0)>=60)||entries.find(e=>e.title), compatible=[...(top?[top]:[]),...entries.filter(e=>e!==top&&(!top||(e.title&&sameTitle(e.title,top.title))))];
   const title=top?.title||'', description=compatible.find(e=>e.description)?.description||'', image=compatible.find(e=>e.image)?.image||'';
   const prices=compatible.filter(e=>e.price), reliable=prices.filter(e=>(e.score||0)>=60);
   const selected= reliable.length?reliable:prices;
-  const price=selected.length&&selected.every(e=>Math.abs(e.price-selected[0].price)<0.011)?selected[0].price:undefined;
+  const price=selected[0]?.price;
+  if(selected.some(e=>Math.abs(e.price-price)>0.011))diagnostics.push('Preços diferentes. Exibindo R$ '+price+' da fonte '+selected[0].source+'; confirme a variante antes de salvar.');
   const storeName=stores.find(([r])=>r.test(new URL(target).hostname))?.[1]||knownStore||storeOf(target), status=title&&image&&price?'success':title||image||price?'partial':'blocked';
   const sources=[...new Set(compatible.map(e=>e.source))];
-  const message=(status==='success'?'Nome, preço e foto encontrados. Confira a variante e o preço.':status==='partial'?'Dados parciais encontrados. Confira os campos faltantes.':'A loja não retornou dados verificáveis. Use o texto ou print da página.')+(sources.length?' Fontes: '+sources.join(', ')+'.':'');
+  const message=(status==='success'?'Nome, preço e foto encontrados. Confira a variante e o preço.':status==='partial'?'Dados parciais. Faltam: '+[!title?'nome':'',!price?'preço':'',!image?'foto':''].filter(Boolean).join(', ')+'.':'A loja não retornou dados verificáveis. Use o texto ou print da página.')+(sources.length?' Fontes: '+sources.join(', ')+'.':'');
   const result={status,normalizedUrl,title,description,image,price,storeName,message,diagnostics};
   console.info('[Amigo Secreto] Importação',diagnostics);
   if(status==='success')cachePut(normalizedUrl,result);
@@ -213,11 +230,14 @@ export function assistImport(result) {
     const status=node('p','');status.setAttribute('aria-live','polite');
     const file=node('input','');file.type='file';file.accept='image/*';file.style.cssText='display:block;max-width:100%;margin:8px 0';
     let busy=false;file.onchange=async()=>{if(!file.files?.[0]||busy)return;busy=true;apply.disabled=true;status.textContent='Carregando reconhecimento de texto local...';try{const text=await recognize(file.files[0],m=>status.textContent=m);area.value=text;status.textContent='Texto reconhecido. Confira antes de importar.';}catch(e){status.textContent='OCR indisponível: '+e.message;}finally{busy=false;apply.disabled=false;}};
-    const apply=button('Preencher com dados copiados',()=>{let p;const s=area.value.trim();try{p=s.startsWith('<')?fromHTML(s,result.normalizedUrl):s.startsWith('{')?fromJSON(JSON.parse(s),result.normalizedUrl):fromText(s,result.normalizedUrl);}catch{p=fromText(s,result.normalizedUrl);}if(!p.title&&!p.price&&!p.image){status.textContent='Nenhum dado reconhecido. Tente escrever Nome do produto e Preço: R$ ...';return;}const merged={...result,title:result.title||p.title||'',price:result.price??p.price,image:result.image||p.image||'',description:result.description||p.description||'',message:'Dados preenchidos. Confira o preço, a variante e a foto.'};merged.status=merged.title&&merged.price&&merged.image?'success':'partial';finish(merged);});
+    const apply=button('Preencher com dados copiados',()=>{let p;const s=area.value.trim();try{p=s.startsWith('<')?fromHTML(s,result.normalizedUrl):s.startsWith('{')?fromJSON(JSON.parse(s),result.normalizedUrl):fromText(s,result.normalizedUrl);}catch{p=fromText(s,result.normalizedUrl);}if(!p.title&&!p.price&&!p.image){status.textContent='Nenhum dado reconhecido. Tente escrever Nome do produto e Preço: R$ ...';return;}const merged={...result,title:p.title||result.title||'',price:p.price??result.price,image:p.image||result.image||'',description:p.description||result.description||'',message:'Dados preenchidos. Confira o preço, a variante e a foto.'};merged.status=merged.title&&merged.price&&merged.image?'success':'partial';finish(merged);});
     button('Continuar sem completar',()=>finish(result));
     const capture=node('details','');node('summary','Capturar diretamente no navegador (opcional)',capture);node('p','Crie um favorito com o código abaixo como endereço. Abra a página do produto no navegador, execute o favorito e cole os dados aqui. Não funciona dentro do aplicativo nativo da loja.',capture);const code=node('textarea','',capture);code.value="javascript:(()=>{const m=(...ks)=>{for(const k of ks){const x=[...document.querySelectorAll('meta')].find(n=>[n.name,n.getAttribute('property'),n.getAttribute('itemprop')].includes(k));if(x?.content)return x.content}return''};const objects=[];function walk(x){if(!x||typeof x!=='object')return;if(Array.isArray(x)){x.forEach(walk);return}if([x['@type']].flat().includes('Product'))objects.push(x);if(x['@graph'])walk(x['@graph']);if(x.mainEntity)walk(x.mainEntity)}document.querySelectorAll('script[type=\"application/ld+json\"]').forEach(s=>{try{walk(JSON.parse(s.textContent))}catch{}});const p=objects.length===1?objects[0]:{},o=Array.isArray(p.offers)?p.offers.length===1?p.offers[0]:{}:p.offers||{};const v={title:p.name||document.querySelector('h1')?.innerText||m('og:title')||document.title,description:p.description||m('og:description'),image:p.image||m('og:image'),price:o.price||m('product:price:amount','og:price:amount'),currency_id:o.priceCurrency||m('product:price:currency','og:price:currency'),url:location.href};const s=JSON.stringify(v);navigator.clipboard?.writeText(s).then(()=>alert('Dados copiados. Volte ao Amigo Secreto e cole.'),()=>prompt('Copie e cole no Amigo Secreto',s))||prompt('Copie e cole no Amigo Secreto',s)})()";code.readOnly=true;code.rows=3;code.style.cssText='width:100%;font-size:11px';button('Copiar código do favorito',async()=>{try{await navigator.clipboard.writeText(code.value);status.textContent='Código copiado.';}catch{code.select();status.textContent='Selecione e copie o código.';}},capture);
     const details=node('details','');node('summary','Diagnóstico e servidor opcional',details);
-    node('pre',(result.diagnostics||[]).join('\n'),details).style.cssText='white-space:pre-wrap;font-size:12px';
+    details.open=true;
+    const report=['Importador v6',result.normalizedUrl,'Resultado: '+result.status,'Nome: '+result.title,'Preço: '+(result.price??'ausente'),'Foto: '+(result.image?'sim':'não'),...(result.diagnostics||[])].join('\n');
+    node('pre',report,details).style.cssText='white-space:pre-wrap;font-size:12px;overflow-wrap:anywhere';
+    button('Copiar diagnóstico',async()=>{try{await navigator.clipboard.writeText(report);status.textContent='Diagnóstico copiado.';}catch{status.textContent='Copie o relatório acima.';}},details);
     node('p','O servidor da família já está configurado automaticamente. Altere o endereço somente se necessário.',details);
     const endpoint=node('input','',details);endpoint.type='url';endpoint.placeholder=DEFAULT_WORKER;endpoint.value=getWorker();endpoint.style.cssText='width:100%;border:1px solid #ddd;padding:8px;box-sizing:border-box';
     button('Salvar servidor',()=>{if(endpoint.value&&!safeUrl(endpoint.value)){status.textContent='Endereço inválido';return;}try{if(endpoint.value.trim())localStorage.setItem('amigo-product-worker',endpoint.value.trim());else localStorage.removeItem('amigo-product-worker');status.textContent='Servidor salvo. Feche e tente importar novamente.';}catch{status.textContent='Não foi possível salvar.';}},details);

@@ -91,7 +91,7 @@ export function extractStoreNameFromUrl(rawUrl: string): string {
 }
 
 export async function fetchLinkMetadata(rawUrl: string): Promise<LinkPreviewResult> {
-  const href = new URL('./product-import.js?v=5', document.baseURI).href;
+  const href = new URL('./product-import.js?v=6', document.baseURI).href;
   const engine = await import(/* @vite-ignore */ href);
   const normalized = engine.normalize(rawUrl);
   const result = await engine.importProduct(rawUrl, extractStoreNameFromUrl(normalized));

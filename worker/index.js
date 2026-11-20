@@ -6,6 +6,7 @@ async function boundedText(res){const reader=res.body?.getReader();if(!reader)re
 export default {async fetch(request,env){
   const o=request.headers.get('Origin'), headers={'Access-Control-Allow-Origin':originAllowed(o)?o:'null','Vary':'Origin','Access-Control-Allow-Methods':'GET, OPTIONS','Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'};
   const reply=(j,status=200)=>new Response(JSON.stringify(j),{status,headers});
+  if(request.method==='GET'&&new URL(request.url).pathname==='/'&&!new URL(request.url).searchParams.has('url'))return reply({ok:true,service:'amigo-secreto-import',version:6,browser:!!env.BROWSER});
   if(!originAllowed(o))return reply({error:'Origem não autorizada'},403);
   if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
   if(request.method!=='GET')return reply({error:'Método inválido'},405);
@@ -16,10 +17,11 @@ export default {async fetch(request,env){
       // Restrict browser requests to storefronts and their known public asset domains.
       const pattern='/^https:\\/\\/(?:[a-z0-9-]+\\.)*(?:shopee\\.com\\.br|shopee\\.com|shope\\.ee|shp\\.ee|susercontent\\.com|shopeemobile\\.com|shein\\.com|shein\\.com\\.br|shein\\.top|ltwebstatic\\.com|sheincorp\\.com|mercadolivre\\.com\\.br|mercadolibre\\.com|mercadolivre\\.com|meli\\.la|mlstatic\\.com|tiktok\\.com|tiktokshop\\.com|tiktokshop\\.com\\.br|tiktokcdn\\.com|tiktokcdn-us\\.com|byteoversea\\.com|ibytedtos\\.com)(?:\\/|$)/i';
       const res=await env.BROWSER.quickAction('content',{url:url.href,allowRequestPattern:[pattern],rejectResourceTypes:['image','media','font'],gotoOptions:{waitUntil:'networkidle2',timeout:15000}});
-      if(!res.ok)return reply({error:'Browser Run HTTP '+res.status},502);
+      if(!res.ok){const detail=(await res.text()).slice(0,350);return reply({error:'Browser Run HTTP '+res.status+' '+detail},502);}
       const raw=await boundedText(res);let j;try{j=JSON.parse(raw)}catch{}
-      const html=typeof j?.result==='string'?j.result:raw;
-      return reply({url:url.href,html});
+      const html=typeof j?.result==='string'?j.result:typeof j?.result?.html==='string'?j.result.html:raw;
+      if(!/<html\b|<!doctype html/i.test(html))return reply({error:'Browser Run não retornou HTML: '+raw.slice(0,200)},502);
+      return reply({url:url.href,html,browserMs:res.headers.get('X-Browser-Ms-Used')});
     }
     const cacheUrl=new URL('https://amigo-import.invalid/');cacheUrl.searchParams.set('url',url.href);
     const key=new Request(cacheUrl.href), cached=await caches.default.match(key);if(cached)return new Response(cached.body,{headers});

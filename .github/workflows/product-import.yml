@@ -25,7 +25,7 @@ jobs:
           node-version: '22'
       - run: node --check public/product-import.js
       - run: node --check worker/index.js
-      - run: node --check docs/assets/index-product-import-v5.js
+      - run: for f in docs/assets/index-*.js; do node --check "$f"; done
       - run: cmp public/product-import.js docs/product-import.js
       - run: node tests/product-import.test.mjs
 

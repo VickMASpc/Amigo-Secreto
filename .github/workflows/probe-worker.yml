@@ -1,0 +1,19 @@
+name: Probe production product Worker
+on:
+  push:
+    paths:
+      - 'tests/probe-worker.mjs'
+      - '.github/workflows/probe-worker.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node tests/probe-worker.mjs
