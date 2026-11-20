@@ -1,0 +1,44 @@
+name: Build GitHub Pages from source
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - 'index.html'
+      - 'tsconfig*.json'
+      - '.env.example'
+      - '.github/workflows/build-pages.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Configure public Firebase web app
+        run: cp .env.example .env
+      - run: npm ci
+      - run: npm run build
+      - name: Commit updated static site
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A docs
+          if git diff --cached --quiet; then
+            echo "Published docs already current"
+          else
+            git commit -m "build: publish updated Amigo Secreto site"
+            git push origin HEAD:main
+          fi

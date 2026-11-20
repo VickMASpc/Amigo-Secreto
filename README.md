@@ -124,3 +124,10 @@ npx wrangler deploy
 ```
 
 A rota `/screenshot` usa CORS e limites por IP e por localização Cloudflare, que não são autenticação de usuário nem garantem um teto diário. Use uma chave dedicada com quota adequada. Não coloque a chave no .env do frontend. Prints serão enviados ao Gemini para análise; evite informações pessoais na captura. O antigo extrator por link continua no código, mas não aparece no formulário.
+
+## Desejos livres, combos referenciados e frete
+- **Pedido livre / Outros:** para pedir algo só escrevendo, sem print e sem preço obrigatório. O tipo visível `misc` fica armazenado como `kind=store, itemType=misc` para funcionar com as regras Firestore já publicadas. Não altere as regras para usar esta função.
+- **Combos:** selecione pelo menos 2 produtos previamente criados na sua própria lista. São gravados os IDs dos produtos referenciados e snapshots compactos, sem duplicar imagens Base64. O feed e a página de detalhes acompanham alterações dos produtos originais, enquanto o snapshot é mantido caso algum seja excluído.
+- **Frete público:** o autor informa o frete estimado do pedido ou do combo; a visualização apresenta valor base e total previsto com frete. A estimativa do carrinho de quem compra continua privada e editável, com opção de aproveitar a sugestão de frete dos desejos. Não são somados automaticamente fretes que podem ser consolidados.
+- **Gemini 3.5 Flash-Lite:** `LOW` thinking e nenhum `maxOutputTokens`; segue sendo uma única chamada ao modelo para cada print. Para ativar a mudança de modelo no Worker já publicado, execute `npx wrangler deploy` dentro da pasta `worker`. A chave continua secreta na conta Cloudflare.
+- **Hospedagem:** o workflow GitHub Actions gera `docs/` automaticamente na branch main usando os dados públicos do Firebase Web App, já presentes no `.env.example`. O Pages continua configurado para hospedar `main/docs`.
