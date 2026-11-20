@@ -1,0 +1,27 @@
+name: Importador de produtos
+on:
+  push:
+    paths:
+      - 'public/product-import.js'
+      - 'docs/product-import.js'
+      - 'docs/assets/index-product-import-*.js'
+      - 'worker/**'
+      - 'tests/**'
+      - '.github/workflows/product-import.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check public/product-import.js
+      - run: node --check worker/index.js
+      - run: node --check docs/assets/index-product-import-v4.js
+      - run: cmp public/product-import.js docs/product-import.js
+      - run: node tests/product-import.test.mjs
