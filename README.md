@@ -113,3 +113,14 @@ npx wrangler login
 npx wrangler deploy
 ````
 O endpoint da família (`https://amigo-secreto-import.vitruidor.workers.dev`) já está configurado como padrão. Não é preciso configurar os dispositivos. Se o endereço mudar, use Diagnóstico e servidor opcional para substituir o endpoint localmente. O Worker tenta HTTP direto e, como fallback, Cloudflare Browser Run via binding BROWSER. A renderização é limitada às lojas e a CDNs conhecidas e pode falhar quando outros domínios forem necessários. Jina Reader também tenta renderizar páginas dinâmicas. A configuração não altera Firebase. Lojas que bloqueiam os provedores ainda exigirão texto ou print.
+
+## Importação por print (v7)
+O formulário não exibe mais importadores de links. Prints são comprimidos localmente para a imagem do produto, e a imagem original (ou redimensionada se maior que 5 MB) é analisada uma vez por `gemini-3.5-flash-lite`, sem busca ou fallback de modelo. Se a análise falhar, a imagem permanece e os campos podem ser preenchidos manualmente. Configure a chave somente no Worker:
+
+```powershell
+cd worker
+npx wrangler secret put GEMINI_API_KEY
+npx wrangler deploy
+```
+
+A rota `/screenshot` usa CORS e limites por IP e por localização Cloudflare, que não são autenticação de usuário nem garantem um teto diário. Use uma chave dedicada com quota adequada. Não coloque a chave no .env do frontend. Prints serão enviados ao Gemini para análise; evite informações pessoais na captura. O antigo extrator por link continua no código, mas não aparece no formulário.

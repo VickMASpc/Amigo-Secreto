@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {normalizeScreenshotResult,MODEL,analyze} from '../worker/screenshot.js';
+assert.equal(MODEL,'gemini-3.5-flash-lite');
+assert.equal(normalizeScreenshotResult({price:89.9,title:' Fone '}).title,'Fone');
+assert.equal(normalizeScreenshotResult({price:89.9}).price,89.9);
+assert.equal(normalizeScreenshotResult({price:'89.90'}).price,null);
+assert.equal(normalizeScreenshotResult({price:-1}).price,null);
+const reply=(data,status=200)=>({data,status});
+assert.equal((await analyze({}, {}, reply)).status,503);
+let calls=0;const env={GEMINI_API_KEY:'mock',SCREENSHOT_LIMIT:{limit:async()=>({success:true})},SCREENSHOT_GLOBAL_LIMIT:{limit:async()=>({success:true})}};
+globalThis.fetch=async(url,opts)=>{calls++;assert.match(url,/gemini-3\.5-flash-lite:generateContent$/);const p=JSON.parse(opts.body);assert.equal(p.generationConfig.thinkingConfig.thinkingLevel,'MINIMAL');assert.equal(p.contents[0].parts[1].inlineData.mimeType,'image/png');return {ok:true,json:async()=>({candidates:[{content:{parts:[{text:JSON.stringify({title:'Fone',price:89.9,storeName:'Shopee',variantInfo:'Preto',description:'',warning:''})}]}}]})}};
+const req=new Request('https://example.com/screenshot',{method:'POST',body:JSON.stringify({mimeType:'image/png',data:'a'.repeat(40)})});const result=await analyze(req,env,reply);assert.equal(result.data.product.price,89.9);assert.equal(calls,1);console.log('Screenshot tests passed; no live API requests.');

@@ -6,7 +6,6 @@ import {
   Clock,
   Info,
   Layers,
-  Link2,
   Loader2,
   Plus,
   Shield,
@@ -36,7 +35,8 @@ import {
   priceToInputString,
 } from '../utils/format';
 import { compressImageFile } from '../utils/imageCompress';
-import { extractStoreNameFromUrl, fetchLinkMetadata } from '../utils/linkPreview';
+import { extractStoreNameFromUrl } from '../utils/linkPreview';
+import { analyzeScreenshot } from '../utils/screenshotImport';
 
 interface ItemFormViewProps {
   currentUser: CurrentUser;
@@ -90,7 +90,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
   const [priceText, setPriceText] = useState(
     editingItem ? priceToInputString(editingItem.price) : ''
   );
-  const [url, setUrl] = useState(editingItem?.url ?? '');
+  const [url] = useState(editingItem?.url ?? '');
   const [storeName, setStoreName] = useState(editingItem?.storeName ?? '');
   const [image, setImage] = useState(editingItem?.image ?? '');
   const [variantInfo, setVariantInfo] = useState(editingItem?.variantInfo ?? '');
@@ -114,7 +114,6 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
     return [createEmptySubItem(), createEmptySubItem()];
   });
 
-  const [fetchingPreview, setFetchingPreview] = useState(false);
   const [previewNotice, setPreviewNotice] = useState<{
     tone: 'success' | 'warning';
     text: string;
@@ -164,52 +163,33 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
     );
   }
 
-  const handleFetchMainLink = async () => {
-    if (!url.trim()) {
-      showToast('Cole o link do produto antes de buscar.', 'info');
-      return;
-    }
-
-    setFetchingPreview(true);
-    setPreviewNotice(null);
-    try {
-      const result = await fetchLinkMetadata(url);
-      setUrl(result.normalizedUrl);
-      if (result.storeName && !storeName.trim()) setStoreName(result.storeName);
-      if (result.title && !title.trim()) setTitle(result.title);
-      if (result.price !== undefined && !priceText.trim()) setPriceText(priceToInputString(result.price));
-      if (result.image && !image.trim()) setImage(result.image);
-      if (result.description && !description.trim()) {
-        setDescription(result.description.slice(0, 220));
-      }
-
-      setPreviewNotice({
-        tone: result.status === 'blocked' ? 'warning' : 'success',
-        text: result.message || 'Dados atualizados!',
-      });
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Link inválido.', 'error');
-    } finally {
-      setFetchingPreview(false);
-    }
-  };
-
-  const handleMainImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMainImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, analyze = false) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
 
     setUploadingMainImg(true);
+    setPreviewNotice(null);
     try {
       const { dataUrl, bytes } = await compressImageFile(file, {
-        maxWidth: 720,
-        maxHeight: 720,
+        maxWidth: 1080,
+        maxHeight: 1800,
         maxBytes: 145 * 1024,
       });
       setImage(dataUrl);
-      showToast(`Foto comprimida (${Math.round(bytes / 1024)} KB) pronta!`, 'success');
+      if (!analyze) { showToast(`Foto comprimida (${Math.round(bytes / 1024)} KB) pronta!`, 'success'); return; }
+      const result = await analyzeScreenshot(file);
+      if (result.title) setTitle(result.title);
+      if (result.price !== null) setPriceText(priceToInputString(result.price));
+      if (result.storeName) setStoreName(result.storeName);
+      if (result.variantInfo) setVariantInfo(result.variantInfo);
+      if (result.description) setDescription(result.description);
+      const missing = !result.title || result.price === null;
+      setPreviewNotice({ tone: missing || result.warning ? 'warning' : 'success', text: [missing ? 'Print salvo. Complete os campos que faltam.' : 'Print analisado! Confira os dados antes de publicar.', result.warning].filter(Boolean).join(' ') });
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Erro ao comprimir imagem.', 'error');
+      const message = err instanceof Error ? err.message : 'Falha ao importar print.';
+      setPreviewNotice({tone:'warning', text: message + ' Se a imagem foi salva, preencha os campos manualmente.'});
+      showToast(message, 'error');
     } finally {
       setUploadingMainImg(false);
     }
@@ -217,30 +197,6 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
 
   const updateSubItem = (id: string, patch: Partial<SubItemDraft>) => {
     setSubItems((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-  };
-
-  const handleSubItemLinkFetch = async (sub: SubItemDraft) => {
-    if (!sub.url.trim()) return;
-    updateSubItem(sub.id, { fetchingLink: true });
-    try {
-      const result = await fetchLinkMetadata(sub.url);
-      updateSubItem(sub.id, {
-        fetchingLink: false,
-        url: result.normalizedUrl,
-        storeName: sub.storeName || result.storeName,
-        title: sub.title || result.title,
-        priceText: sub.priceText || (result.price !== undefined ? priceToInputString(result.price) : ''),
-        image: sub.image || result.image,
-      });
-      if (result.status === 'blocked') {
-        showToast('Não foi possível confirmar os dados da loja. Complete os campos que faltam.', 'info');
-      } else {
-        showToast('Dados do item do combo preenchidos!', 'success');
-      }
-    } catch (err) {
-      updateSubItem(sub.id, { fetchingLink: false });
-      showToast(err instanceof Error ? err.message : 'Link inválido.', 'error');
-    }
   };
 
   const handleSubItemImageUpload = async (
@@ -254,12 +210,14 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
     updateSubItem(subId, { uploadingImg: true });
     try {
       const { dataUrl } = await compressImageFile(file, {
-        maxWidth: 560,
-        maxHeight: 560,
+        maxWidth: 800,
+        maxHeight: 1300,
         maxBytes: 75 * 1024,
       });
-      updateSubItem(subId, { image: dataUrl, uploadingImg: false });
-      showToast('Miniatura adicionada ao combo!', 'success');
+      updateSubItem(subId, { image: dataUrl });
+      const result = await analyzeScreenshot(file);
+      updateSubItem(subId, { ...(result.title ? {title:result.title}:{}), ...(result.price !== null ? {priceText:priceToInputString(result.price)}:{}), ...(result.storeName ? {storeName:result.storeName}:{}), ...(result.variantInfo ? {notes:result.variantInfo}:{}), uploadingImg:false });
+      showToast(result.warning || (!result.title || result.price === null ? 'Print salvo. Complete os campos.' : 'Print do combo analisado!'), result.warning || !result.title || result.price === null ? 'info' : 'success');
     } catch (err) {
       updateSubItem(subId, { uploadingImg: false });
       showToast(err instanceof Error ? err.message : 'Erro na imagem.', 'error');
@@ -272,6 +230,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (uploadingMainImg || subItems.some(s => s.uploadingImg)) { showToast('Aguarde a análise do print terminar.', 'info'); return; }
 
     if (!title.trim()) {
       showToast('Dê um nome para o seu pedido.', 'error');
@@ -380,7 +339,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
               {
                 id: 'store',
                 label: 'Produto de Loja',
-                desc: 'Com link de loja online',
+                desc: 'Importe um print da loja',
                 icon: Store,
               },
               {
@@ -426,65 +385,17 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
         </div>
 
         <div className="mt-6 space-y-5">
-          {/* Bloco de Auto-preenchimento por Link (para Loja e opcional em Digital) */}
+          {/* Importação por print */}
           {kind !== 'bundle' && (
             <div className="rounded-2xl border border-[#ECE6DB] bg-[#FAF7F2] p-4">
-              <label className="block text-xs font-bold uppercase tracking-wider text-[#6B655D]">
-                {kind === 'store'
-                  ? 'Link do produto (Amazon, Shopee, Mercado Livre...)'
-                  : 'Link de referência (opcional)'}
+              <label className="block text-sm font-bold text-[#1F1D1A]">Importar print do produto</label>
+              <p className="mt-1 text-xs text-[#6B655D]">Capture a página com nome e preço visíveis. O Gemini 3.5 Flash-Lite lê o print, que também será a foto do desejo.</p>
+              <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#214E3E] px-4 py-3 text-sm font-bold text-white">
+                {uploadingMainImg ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {uploadingMainImg ? 'Analisando print...' : 'Selecionar print'}
+                <input type="file" accept="image/*" onChange={(e) => handleMainImageUpload(e, true)} disabled={uploadingMainImg} className="hidden" />
               </label>
-              <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                <div className="relative flex-1">
-                  <Link2 className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-[#8B8275]" />
-                  <input
-                    type="url"
-                    value={url}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setUrl(val);
-                      if (!storeName.trim() && val.includes('.')) {
-                        const detected = extractStoreNameFromUrl(val);
-                        if (detected) setStoreName(detected);
-                      }
-                    }}
-                    placeholder="https://www.amazon.com.br/..."
-                    className="w-full rounded-xl border border-[#DFD7CA] bg-white py-2.5 pr-3 pl-10 text-sm text-[#1F1D1A] outline-none focus:border-[#B83B35]"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={handleFetchMainLink}
-                  disabled={fetchingPreview}
-                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#1F1D1A] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#33302B] disabled:opacity-60"
-                >
-                  {fetchingPreview ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Buscando...
-                    </>
-                  ) : (
-                    'Buscar dados do link'
-                  )}
-                </button>
-              </div>
-
-              {previewNotice && (
-                <div
-                  className={`mt-3 flex items-start gap-2 rounded-xl px-3 py-2 text-xs font-medium ${
-                    previewNotice.tone === 'success'
-                      ? 'bg-[#E6F0EC] text-[#214E3E]'
-                      : 'bg-[#FBF3E2] text-[#7A581B]'
-                  }`}
-                >
-                  {previewNotice.tone === 'success' ? (
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-                  ) : (
-                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                  )}
-                  <span>{previewNotice.text}</span>
-                </div>
-              )}
+              {previewNotice && <div role="status" className={`mt-3 flex items-start gap-2 rounded-xl px-3 py-2 text-xs font-medium ${previewNotice.tone === 'success' ? 'bg-[#E6F0EC] text-[#214E3E]' : 'bg-[#FBF3E2] text-[#7A581B]'}`}>{previewNotice.tone === 'success' ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}<span>{previewNotice.text}</span></div>}
             </div>
           )}
 
@@ -595,11 +506,11 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
                 </label>
                 <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-[#DFD7CA] bg-white px-3 py-1.5 text-xs font-bold text-[#1F1D1A] transition hover:bg-[#EFE8DB]">
                   <Upload className="h-3.5 w-3.5 text-[#B83B35]" />
-                  {uploadingMainImg ? 'Comprimindo...' : 'Enviar foto do celular/PC'}
+                  {uploadingMainImg ? 'Comprimindo...' : 'Enviar foto sem análise'}
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={handleMainImageUpload}
+                    onChange={(e) => handleMainImageUpload(e, false)}
                     disabled={uploadingMainImg}
                     className="hidden"
                   />
@@ -607,14 +518,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
               </div>
 
               <div className="mt-2.5 flex items-center gap-3">
-                <input
-                  type="text"
-                  value={image.startsWith('data:image/') ? 'Foto enviada e comprimida ✓' : image}
-                  onChange={(e) => setImage(e.target.value)}
-                  disabled={image.startsWith('data:image/')}
-                  placeholder="Ou cole a URL direta de uma imagem (https://...)"
-                  className="flex-1 rounded-xl border border-[#DFD7CA] bg-white px-3.5 py-2.5 text-sm text-[#1F1D1A] outline-none focus:border-[#B83B35] disabled:text-[#214E3E] disabled:font-semibold"
-                />
+                <span className="flex-1 text-xs text-[#6B655D]">{image ? 'Imagem selecionada' : 'Nenhuma imagem selecionada'}</span>
                 {image && (
                   <button
                     type="button"
@@ -632,7 +536,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
                   <img
                     src={image}
                     alt="Prévia"
-                    className="h-20 w-20 rounded-xl border border-[#DFD7CA] bg-white object-cover"
+                    className="h-20 w-20 rounded-xl border border-[#DFD7CA] bg-white object-contain"
                   />
                   <span className="text-xs text-[#6B655D]">Pré-visualização da capa</span>
                 </div>
@@ -762,30 +666,14 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
                     </div>
 
                     <div className="mt-2.5 flex flex-col gap-2 sm:flex-row">
-                      <input
-                        type="url"
-                        value={sub.url}
-                        onChange={(e) => updateSubItem(sub.id, { url: e.target.value })}
-                        placeholder="Link opcional da loja"
-                        className="flex-1 rounded-xl border border-[#DFD7CA] bg-white px-3.5 py-2 text-xs text-[#1F1D1A] outline-none focus:border-[#B83B35]"
-                      />
-                      {sub.url && (
-                        <button
-                          type="button"
-                          onClick={() => handleSubItemLinkFetch(sub)}
-                          disabled={sub.fetchingLink}
-                          className="shrink-0 rounded-xl bg-[#1F1D1A] px-3 py-2 text-xs font-semibold text-white hover:bg-[#33302B] disabled:opacity-60"
-                        >
-                          {sub.fetchingLink ? 'Buscando...' : 'Puxar link'}
-                        </button>
-                      )}
                       <label className="inline-flex cursor-pointer items-center justify-center gap-1 rounded-xl border border-[#DFD7CA] bg-white px-3 py-2 text-xs font-semibold text-[#1F1D1A] hover:bg-[#EFE8DB]">
                         <Upload className="h-3.5 w-3.5 text-[#B83B35]" />
-                        {sub.uploadingImg ? '...' : sub.image ? 'Trocar foto' : 'Foto'}
+                        {sub.uploadingImg ? 'Analisando print...' : sub.image ? 'Importar outro print' : 'Importar print'}
                         <input
                           type="file"
                           accept="image/*"
                           onChange={(e) => handleSubItemImageUpload(sub.id, e)}
+                          disabled={sub.uploadingImg}
                           className="hidden"
                         />
                       </label>
@@ -891,7 +779,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
             </button>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || uploadingMainImg || subItems.some(s => s.uploadingImg)}
               className="rounded-2xl bg-[#B83B35] px-6 py-3 text-sm font-bold text-white shadow-md transition hover:bg-[#992D28] disabled:opacity-60"
             >
               {saving
