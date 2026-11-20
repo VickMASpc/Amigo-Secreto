@@ -83,6 +83,50 @@ function parseProducts(doc,url) {
   for(const node of doc.querySelectorAll('script[type="application/ld+json"]'))try{visit(JSON.parse(node.textContent));}catch{}
   return result;
 }
+// Match storefront state to the exact product identifier rather than recommendations.
+function embeddedProduct(doc,url) {
+  const u=new URL(url), store=storeOf(url), out=[];
+  let id='', shop='';
+  if(store==='Shopee'){const m=u.pathname.match(/(?:-i\.|\/product\/)(\d+)[./](\d+)/);if(m){shop=m[1];id=m[2];}}
+  else if(store==='SHEIN')id=u.searchParams.get('goods_id')||u.pathname.match(/-p-(\d+)/)?.[1]||'';
+  else if(store==='TikTok Shop')id=u.searchParams.get('product_id')||u.pathname.match(/\/(?:product|pdp)\/(?:[^/]+\/)?(\d{8,})(?:\/|$)/)?.[1]||'';
+  if(!id)return;
+  function inspect(root){
+    const queue=[root];let count=0;
+    while(queue.length&&count++<50000){
+      const v=queue.pop();if(!v||typeof v!=='object')continue;
+      if(!Array.isArray(v)){
+        let p;
+        if(store==='Shopee'&&String(v.itemid??v.itemId??'')===id&&String(v.shopid??v.shopId??'')===shop){
+          const min=v.price_min??v.priceMin??v.price,max=v.price_max??v.priceMax??v.price;
+          const price=typeof min==='number'&&min===max&&min>=100000&&/\.com\.br$/.test(u.hostname)?priceOf(min/100000):undefined;
+          let image=v.image||v.images?.[0];if(typeof image==='string'&&/^[A-Za-z0-9_-]{15,}$/.test(image))image='https://down-br.img.susercontent.com/file/'+image;
+          p={title:titleOf(v.name||v.title),image:imgOf(image,url),description:clean(v.description),price};
+        }else if(store==='SHEIN'&&String(v.goods_id??v.goodsId??'')===id){
+          const sale=v.salePrice??v.sale_price;const amount=sale?.amount??sale?.value??sale;
+          const price=typeof amount==='string'&&/^R\$/i.test(amount.trim())?priceOf(amount):sale?.currency==='BRL'?priceOf(amount):undefined;
+          p={title:titleOf(v.goods_name||v.goodsName),image:imgOf(v.goods_img||v.goodsImg||v.image,url),price};
+        }else if(store==='TikTok Shop'&&String(v.product_id??v.productId??'')===id){
+          const sale=v.sale_price??v.salePrice??v.price;
+          const formatted=sale?.formatted_price??sale?.formattedPrice??sale?.price_str??sale;
+          const price=typeof formatted==='string'&&/^R\$/i.test(formatted.trim())?priceOf(formatted):sale?.currency==='BRL'?priceOf(sale.amount??sale.value):undefined;
+          p={title:titleOf(v.product_name||v.productName||v.title),image:imgOf(v.image||v.cover||v.images?.[0],url),description:clean(v.description),price};
+        }
+        if(p?.title)out.push({...p,score:93});
+      }
+      for(const child of Object.values(v))if(child&&typeof child==='object')queue.push(child);
+    }
+  }
+  for(const script of doc.querySelectorAll('script[type="application/json"],script#__NEXT_DATA__,script#__UNIVERSAL_DATA_FOR_REHYDRATION__,script#SIGI_STATE')){
+    const txt=script.textContent||'';if(txt.length>5000000)continue;
+    try{inspect(JSON.parse(txt));}catch{}
+  }
+  if(!out.length)return;
+  const best=out.find(x=>x.price&&x.image)||out.find(x=>x.image)||out[0];
+  const prices=[...new Set(out.map(x=>x.price).filter(Boolean))];
+  return {...best,price:prices.length===1?prices[0]:undefined};
+}
+
 export function fromHTML(markup,url) {
   if(typeof markup!=='string'||markup.length<30)return {};
   const doc=new DOMParser().parseFromString(markup,'text/html');
@@ -92,14 +136,14 @@ export function fromHTML(markup,url) {
   const items=parseProducts(doc,url), pageH1=titleOf(doc.querySelector('h1')?.textContent);
   const current=new URL(url);
   const matched=items.filter(p=>{try{return p.url&&new URL(p.url).pathname===current.pathname;}catch{return false;}});
-  const selected=matched.length===1?matched[0]:items.length===1?items[0]:undefined;
+  const selected=embeddedProduct(doc,url)||(matched.length===1?matched[0]:items.length===1?items[0]:undefined);
   const curr=meta('product:price:currency','og:price:currency','priceCurrency');
   const priceTag=currencyPrice(meta('product:price:amount','og:price:amount','price'),curr);
   const itempropPrice=doc.querySelector('[itemprop="price"]');
   const scopedPrice=currencyPrice(itempropPrice?.getAttribute('content')||itempropPrice?.textContent,curr);
   const title=selected?.title||pageH1||titleOf(pageTitle);
   if(!title)return {};
-  return {title,description:selected?.description||clean(meta('og:description','description','twitter:description')),image:selected?.image||imgOf(meta('og:image','twitter:image','og:image:secure_url'),url),price:selected?.price??priceTag??scopedPrice,score:selected?90:60};
+  return {title,description:selected?.description||clean(meta('og:description','description','twitter:description')),image:selected?.image||imgOf(meta('og:image','twitter:image','og:image:secure_url'),url),price:selected?.price??priceTag??scopedPrice,score:selected?.score|| (selected?90:60)};
 }
 const timeout=async (url,ms=12000,opts={})=>{
   const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),ms);
@@ -119,8 +163,8 @@ export async function importProduct(raw,knownStore='') {
   const target=options[0], canonical=options[1]||target, worker=getWorker();
   const tasks=[
     add('HTML direto',async()=>{const {body,response}=await timeout(canonical,8500);return {...fromHTML(body,response.url||canonical),url:response.url};}),
-    add('Jina HTML',async()=>{const {body}=await timeout('https://r.jina.ai/'+target,18000,{headers:{'X-Respond-With':'html'}});return fromHTML(body,target);}),
-    add('Jina Reader',async()=>{const {body}=await timeout('https://r.jina.ai/'+target,18000);return {...fromText(body,target),score:30};}),
+    add('Jina HTML',async()=>{const {body}=await timeout('https://r.jina.ai/'+target,18000,{headers:{'X-Respond-With':'html','Accept':'application/json'}});let j;try{j=JSON.parse(body)}catch{};return fromHTML(j?.data?.content||body,j?.data?.url||target);}),
+    add('Jina Reader',async()=>{const {body}=await timeout('https://r.jina.ai/'+target,18000,{headers:{Accept:'application/json'}});let j;try{j=JSON.parse(body)}catch{};const d=j?.data;return {...fromText(d?.content||body,d?.url||target),title:titleOf(d?.title)||fromText(d?.content||body,target).title,score:30};}),
     add('Microlink',async()=>{const q=new URLSearchParams({url:target});const {body}=await timeout('https://api.microlink.io/?'+q,14000);const j=JSON.parse(body);if(j.status!=='success')throw Error(j.message||j.status);return fromJSON(j.data||{},target);}),
     add('JSONLink',async()=>{const {body}=await timeout('https://jsonlink.io/api/extract?url='+encodeURIComponent(target),11000);return fromJSON(JSON.parse(body),target);})
   ];
@@ -133,12 +177,12 @@ export async function importProduct(raw,knownStore='') {
   if(!usable()&&canonical!==target)await add('Jina URL alternativa',async()=>{const {body}=await timeout('https://r.jina.ai/'+canonical,12000);return {...fromText(body,canonical),score:25};});
   if(!usable()&&worker)await add('Worker navegador',async()=>{const u=new URL(worker);u.searchParams.set('url',target);u.searchParams.set('render','1');const {body}=await timeout(u.href,25000);const j=JSON.parse(body);return {...fromHTML(j.html,j.url||target),url:j.url};});
   entries.sort((a,b)=>(b.score||0)-(a.score||0));
-  const top=entries.find(e=>e.title), compatible=entries.filter(e=>!top||!e.title||e===top||sameTitle(e.title,top.title));
+  const top=entries.find(e=>e.title), compatible=entries.filter(e=>!top||e===top||(e.title&&sameTitle(e.title,top.title)));
   const title=top?.title||'', description=compatible.find(e=>e.description)?.description||'', image=compatible.find(e=>e.image)?.image||'';
   const prices=compatible.filter(e=>e.price), reliable=prices.filter(e=>(e.score||0)>=60);
   const selected= reliable.length?reliable:prices;
   const price=selected.length&&selected.every(e=>Math.abs(e.price-selected[0].price)<0.011)?selected[0].price:undefined;
-  const storeName=knownStore||storeOf(target), status=title&&image&&price?'success':title||image||price?'partial':'blocked';
+  const storeName=stores.find(([r])=>r.test(new URL(target).hostname))?.[1]||knownStore||storeOf(target), status=title&&image&&price?'success':title||image||price?'partial':'blocked';
   const sources=[...new Set(compatible.map(e=>e.source))];
   const message=(status==='success'?'Nome, preço e foto encontrados. Confira a variante e o preço.':status==='partial'?'Dados parciais encontrados. Confira os campos faltantes.':'A loja não retornou dados verificáveis. Use o texto ou print da página.')+(sources.length?' Fontes: '+sources.join(', ')+'.':'');
   const result={status,normalizedUrl,title,description,image,price,storeName,message,diagnostics};
@@ -163,12 +207,14 @@ export function assistImport(result) {
     node('h2','Completar importação');node('p',result.message);
     const link=node('a','Abrir produto na loja ↗');link.href=result.normalizedUrl;link.target='_blank';link.rel='noopener noreferrer';link.style.cssText='display:block;color:#21684a;text-decoration:underline;margin:12px 0';
     node('p','Cole o texto compartilhado pelo app da loja, o nome e o preço copiados, ou um print. Os dados serão preenchidos para revisão.');
+    const search=node('a','Pesquisar o link no Google ↗');search.href='https://www.google.com/search?q='+encodeURIComponent(result.normalizedUrl);search.target='_blank';search.rel='noopener noreferrer';search.style.cssText='display:block;color:#21684a;text-decoration:underline;margin:8px 0';
     const area=node('textarea','');area.rows=6;area.placeholder='Nome do produto\nPreço: R$ 99,90';area.style.cssText='width:100%;padding:10px;border:1px solid #dfd7ca;border-radius:10px;box-sizing:border-box';
     const status=node('p','');status.setAttribute('aria-live','polite');
     const file=node('input','');file.type='file';file.accept='image/*';file.style.cssText='display:block;max-width:100%;margin:8px 0';
     let busy=false;file.onchange=async()=>{if(!file.files?.[0]||busy)return;busy=true;apply.disabled=true;status.textContent='Carregando reconhecimento de texto local...';try{const text=await recognize(file.files[0],m=>status.textContent=m);area.value=text;status.textContent='Texto reconhecido. Confira antes de importar.';}catch(e){status.textContent='OCR indisponível: '+e.message;}finally{busy=false;apply.disabled=false;}};
     const apply=button('Preencher com dados copiados',()=>{let p;const s=area.value.trim();try{p=s.startsWith('<')?fromHTML(s,result.normalizedUrl):s.startsWith('{')?fromJSON(JSON.parse(s),result.normalizedUrl):fromText(s,result.normalizedUrl);}catch{p=fromText(s,result.normalizedUrl);}if(!p.title&&!p.price&&!p.image){status.textContent='Nenhum dado reconhecido. Tente escrever Nome do produto e Preço: R$ ...';return;}const merged={...result,title:result.title||p.title||'',price:result.price??p.price,image:result.image||p.image||'',description:result.description||p.description||'',message:'Dados preenchidos. Confira o preço, a variante e a foto.'};merged.status=merged.title&&merged.price&&merged.image?'success':'partial';finish(merged);});
     button('Continuar sem completar',()=>finish(result));
+    const capture=node('details','');node('summary','Capturar diretamente no navegador (opcional)',capture);node('p','Crie um favorito com o código abaixo como endereço. Abra a página do produto no navegador, execute o favorito e cole os dados aqui. Não funciona dentro do aplicativo nativo da loja.',capture);const code=node('textarea','',capture);code.value="javascript:(()=>{const m=(...ks)=>{for(const k of ks){const x=[...document.querySelectorAll('meta')].find(n=>[n.name,n.getAttribute('property'),n.getAttribute('itemprop')].includes(k));if(x?.content)return x.content}return''};const objects=[];function walk(x){if(!x||typeof x!=='object')return;if(Array.isArray(x)){x.forEach(walk);return}if([x['@type']].flat().includes('Product'))objects.push(x);if(x['@graph'])walk(x['@graph']);if(x.mainEntity)walk(x.mainEntity)}document.querySelectorAll('script[type=\"application/ld+json\"]').forEach(s=>{try{walk(JSON.parse(s.textContent))}catch{}});const p=objects.length===1?objects[0]:{},o=Array.isArray(p.offers)?p.offers.length===1?p.offers[0]:{}:p.offers||{};const v={title:p.name||document.querySelector('h1')?.innerText||m('og:title')||document.title,description:p.description||m('og:description'),image:p.image||m('og:image'),price:o.price||m('product:price:amount','og:price:amount'),currency_id:o.priceCurrency||m('product:price:currency','og:price:currency'),url:location.href};const s=JSON.stringify(v);navigator.clipboard?.writeText(s).then(()=>alert('Dados copiados. Volte ao Amigo Secreto e cole.'),()=>prompt('Copie e cole no Amigo Secreto',s))||prompt('Copie e cole no Amigo Secreto',s)})()";code.readOnly=true;code.rows=3;code.style.cssText='width:100%;font-size:11px';button('Copiar código do favorito',async()=>{try{await navigator.clipboard.writeText(code.value);status.textContent='Código copiado.';}catch{code.select();status.textContent='Selecione e copie o código.';}},capture);
     const details=node('details','');node('summary','Diagnóstico e servidor opcional',details);
     node('pre',(result.diagnostics||[]).join('\n'),details).style.cssText='white-space:pre-wrap;font-size:12px';
     node('p','Se o administrador publicou o Worker de importação, configure o endereço neste dispositivo.',details);

@@ -102,7 +102,7 @@ O `vite.config.ts` já está configurado com `base: './'` e saída em `docs/`.
 ```
 
 ## Importação de produtos (v3)
-O frontend consulta HTML direto, Jina HTML/Reader, Microlink e JSONLink em paralelo. Links Shopee, SHEIN, Mercado Livre e TikTok Shop são reconhecidos; identificadores válidos podem gerar URLs alternativas. A API Mercado Livre é tentada sem credenciais quando contém um ID de anúncio, mas pode exigir OAuth. Nenhuma chave é necessária para o importador básico. Provedores recebem apenas a URL do produto; evite links privados. Valores conflitantes ou ambíguos não são preenchidos automaticamente. O formulário preserva campos já preenchidos. Quando faltar algum dado, abre recuperação por texto, HTML copiado ou OCR local em português/inglês (Tesseract carregado sob demanda). A foto pode continuar sendo adicionada pelo upload existente.
+O frontend consulta HTML direto, Jina HTML/Reader, Microlink e JSONLink em paralelo. Links Shopee, SHEIN, Mercado Livre e TikTok Shop são reconhecidos; dados JSON incorporados são lidos quando o identificador coincide com o produto; identificadores válidos podem gerar URLs alternativas. A API Mercado Livre é tentada sem credenciais quando contém um ID de anúncio, mas pode exigir OAuth. Nenhuma chave é necessária para o importador básico. Provedores recebem apenas a URL do produto; evite links privados. Valores conflitantes ou ambíguos não são preenchidos automaticamente. O formulário preserva campos já preenchidos. Quando faltar algum dado, abre recuperação por texto, HTML copiado ou OCR local em português/inglês (Tesseract carregado sob demanda). Há também um capturador opcional por favorito para ler dados da página aberta normalmente no navegador. A foto pode continuar sendo adicionada pelo upload existente.
 
 ### Worker opcional (Cloudflare)
 O Worker inclui lista fechada de lojas e valida redirecionamentos. Não é um proxy geral nem usa login da loja. Para publicar (conta Cloudflare necessária):
@@ -112,4 +112,4 @@ cd worker
 npx wrangler login
 npx wrangler deploy
 ````
-Copie a URL HTTPS retornada em Diagnóstico e servidor opcional, dentro da recuperação de importação no app. A configuração é local por dispositivo. O Worker atual faz apenas HTTP direto; não inclui Chromium. Jina Reader já tenta renderizar páginas dinâmicas. A configuração não altera Firebase. Lojas que bloqueiam os provedores ainda exigirão texto ou print.
+Copie a URL HTTPS retornada em Diagnóstico e servidor opcional, dentro da recuperação de importação no app. A configuração é local por dispositivo. O Worker tenta HTTP direto e, como fallback, Cloudflare Browser Run via binding BROWSER. A renderização é limitada às lojas e a CDNs conhecidas e pode falhar quando outros domínios forem necessários. Jina Reader também tenta renderizar páginas dinâmicas. A configuração não altera Firebase. Lojas que bloqueiam os provedores ainda exigirão texto ou print.

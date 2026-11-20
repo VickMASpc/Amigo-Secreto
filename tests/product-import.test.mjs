@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {priceOf,fromText,normalize,storeOf} from '../public/product-import.js';
+assert.equal(priceOf('R$ 1.234,56'),1234.56);
+assert.equal(priceOf('79.90'),79.9);
+assert.equal(fromText('Camiseta de algodão\nPreço: R$ 49,90\nFrete R$ 12,00').price,49.9);
+assert.equal(fromText('Camiseta de algodão\nR$ 49,90\nR$ 59,90').price,undefined);
+assert.equal(storeOf('https://s.shopee.com.br/abc'),'Shopee');
+assert.equal(storeOf('https://onelink.shein.com/abc'),'SHEIN');
+assert.equal(storeOf('https://vm.tiktok.com/abc'),'TikTok Shop');
+assert.equal(normalize('Veja: https://shopee.com.br/product/12/34'),'https://shopee.com.br/product/12/34');
+console.log('8 checks passed');

@@ -11,7 +11,16 @@ export default {async fetch(request,env){
   if(request.method!=='GET')return reply({error:'Método inválido'},405);
   try{
     const q=new URL(request.url).searchParams;let url=validate(q.get('url'));
-    if(q.get('render')==='1')return reply({error:'Renderização desativada neste Worker; use Jina Reader ou o importador local.'},501);
+    if(q.get('render')==='1'){
+      if(!env.BROWSER)return reply({error:'Browser Run não configurado'},501);
+      // Restrict browser requests to storefronts and their known public asset domains.
+      const pattern='/^https:\\/\\/(?:[a-z0-9-]+\\.)*(?:shopee\\.com\\.br|shopee\\.com|shope\\.ee|shp\\.ee|susercontent\\.com|shopeemobile\\.com|shein\\.com|shein\\.com\\.br|shein\\.top|ltwebstatic\\.com|sheincorp\\.com|mercadolivre\\.com\\.br|mercadolibre\\.com|mercadolivre\\.com|meli\\.la|mlstatic\\.com|tiktok\\.com|tiktokshop\\.com|tiktokshop\\.com\\.br|tiktokcdn\\.com|tiktokcdn-us\\.com|byteoversea\\.com|ibytedtos\\.com)(?:\\/|$)/i';
+      const res=await env.BROWSER.quickAction('content',{url:url.href,allowRequestPattern:[pattern],rejectResourceTypes:['image','media','font'],gotoOptions:{waitUntil:'networkidle2',timeout:15000}});
+      if(!res.ok)return reply({error:'Browser Run HTTP '+res.status},502);
+      const raw=await boundedText(res);let j;try{j=JSON.parse(raw)}catch{}
+      const html=typeof j?.result==='string'?j.result:raw;
+      return reply({url:url.href,html});
+    }
     const cacheUrl=new URL('https://amigo-import.invalid/');cacheUrl.searchParams.set('url',url.href);
     const key=new Request(cacheUrl.href), cached=await caches.default.match(key);if(cached)return new Response(cached.body,{headers});
     for(let i=0;i<6;i++){
