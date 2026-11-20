@@ -285,8 +285,8 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
           Escolha o formato do pedido abaixo. Pode adicionar quantas opções quiser!
         </p>
 
-        {/* Seletor dos 3 modos */}
-        <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {/* Formatos de pedido */}
+        <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {(
             [
               {
@@ -302,9 +302,15 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
                 icon: Sparkles,
               },
               {
+                id: 'misc',
+                label: 'Pedido livre / Outros',
+                desc: 'Só escrever o que quer',
+                icon: FileText,
+              },
+              {
                 id: 'bundle',
                 label: 'Monte um Combo',
-                desc: 'Vários itens somados',
+                desc: 'Junte desejos já adicionados',
                 icon: Layers,
               },
             ] as const
@@ -339,7 +345,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
 
         <div className="mt-6 space-y-5">
           {/* Importação por print */}
-          {kind !== 'bundle' && (
+          {(kind === 'store' || kind === 'digital') && (
             <div className="rounded-2xl border border-[#ECE6DB] bg-[#FAF7F2] p-4">
               <label className="block text-sm font-bold text-[#1F1D1A]">Importar print do produto</label>
               <p className="mt-1 text-xs text-[#6B655D]">Capture a página com nome e preço visíveis. O Gemini 3.5 Flash-Lite lê o print, que também será a foto do desejo.</p>
@@ -360,7 +366,9 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
                   ? 'Nome do pacote / combo *'
                   : kind === 'digital'
                     ? 'Nome do item digital / serviço *'
-                    : 'Nome do produto *'}
+                    : kind === 'misc'
+                      ? 'O que você gostaria de ganhar? *'
+                      : 'Nome do produto *'}
               </label>
               <input
                 type="text"
@@ -372,7 +380,9 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
                     ? 'Ex: Combo Setup + Livros'
                     : kind === 'digital'
                       ? 'Ex: 1 mês de Google AI Pro / Gift Card Steam'
-                      : 'Ex: Fone Bluetooth JBL Tune 520BT'
+                      : kind === 'misc'
+                        ? 'Ex: Meias quentinhas, um livro de receitas, uma bolsa...'
+                        : 'Ex: Fone Bluetooth JBL Tune 520BT'
                 }
                 className="mt-1.5 w-full rounded-2xl border border-[#DFD7CA] bg-[#FAF7F2] px-4 py-3 text-sm text-[#1F1D1A] outline-none focus:border-[#B83B35] focus:bg-white"
               />
@@ -381,7 +391,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
             {kind !== 'bundle' && (
               <div>
                 <label className="block text-sm font-semibold text-[#1F1D1A]">
-                  Preço estimado (R$) *
+                  {kind === 'misc' ? 'Preço aproximado (R$) — opcional' : 'Preço estimado (R$) *'}
                 </label>
                 <div className="relative mt-1.5">
                   <span className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-sm font-bold text-[#6B655D]">
@@ -392,8 +402,8 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
                     inputMode="decimal"
                     value={priceText}
                     onChange={(e) => setPriceText(e.target.value)}
-                    required
-                    placeholder="149,90"
+                    required={kind !== 'misc'}
+                    placeholder={kind === 'misc' ? 'Deixe vazio se não souber' : '149,90'}
                     className="w-full rounded-2xl border border-[#DFD7CA] bg-[#FAF7F2] py-3 pr-4 pl-10 text-sm font-bold text-[#1F1D1A] outline-none focus:border-[#B83B35] focus:bg-white"
                   />
                 </div>
@@ -421,7 +431,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
           )}
 
           {/* Loja e Variantes */}
-          {kind !== 'bundle' && (
+          {(kind === 'store' || kind === 'digital') && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="block text-sm font-semibold text-[#1F1D1A]">
@@ -451,7 +461,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
           )}
 
           {/* Foto do item (URL ou Upload comprimido) */}
-          {kind !== 'bundle' && (
+          {(kind === 'store' || kind === 'digital') && (
             <div className="rounded-2xl border border-[#ECE6DB] bg-[#FAF7F2] p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <label className="text-sm font-semibold text-[#1F1D1A]">
@@ -703,13 +713,13 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
           {/* Observações gerais */}
           <div>
             <label className="block text-sm font-semibold text-[#1F1D1A]">
-              Observações extras (opcional)
+              {kind === 'misc' ? 'Detalhes do seu pedido livre (opcional)' : 'Observações extras (opcional)'}
             </label>
             <textarea
-              rows={2}
+              rows={kind === 'misc' ? 4 : 2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Alguma dica extra sobre esse presente?"
+              placeholder={kind === 'misc' ? 'Pode escrever naturalmente: marca, tamanho, cor, alternativas que aceitaria...' : 'Alguma dica extra sobre esse presente?'}
               className="mt-1.5 w-full rounded-2xl border border-[#DFD7CA] bg-[#FAF7F2] px-4 py-3 text-sm text-[#1F1D1A] outline-none focus:border-[#B83B35] focus:bg-white"
             />
           </div>
@@ -732,7 +742,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
             </button>
             <button
               type="submit"
-              disabled={saving || uploadingMainImg || subItems.some(s => s.uploadingImg)}
+              disabled={saving || uploadingMainImg}
               className="rounded-2xl bg-[#B83B35] px-6 py-3 text-sm font-bold text-white shadow-md transition hover:bg-[#992D28] disabled:opacity-60"
             >
               {saving
