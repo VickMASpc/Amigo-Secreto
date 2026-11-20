@@ -196,7 +196,7 @@ export const WishCard: React.FC<WishCardProps> = ({
             </span>
             {item.shippingEstimate > 0 && <span className="w-full text-xs font-semibold text-[#6B655D]">Frete {formatBRL(item.shippingEstimate)} · Total {formatBRL(totalWithShipping(item))}</span>}
             <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${badgeToneClasses}`}>
-              {budgetInfo.label}
+              {item.kind === 'misc' && item.price <= 0 ? 'Valor não informado' : budgetInfo.label}
             </span>
           </div>
 

@@ -202,9 +202,9 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                         : 'bg-[#F4EFE6] text-[#5B544A]'
                   }`}
                 >
-                  {budgetInfo.label}
+                  {item.kind === 'misc' && item.price <= 0 ? 'Preço a combinar' : budgetInfo.label}
                 </span>
-                <p className="mt-1 text-xs text-[#6B655D]">{budgetInfo.diffText}</p>
+                <p className="mt-1 text-xs text-[#6B655D]">{item.kind === 'misc' && item.price <= 0 ? 'O comprador pode estimar o valor ao escolher o presente.' : budgetInfo.diffText}</p>
               </div>
             </div>
           </div>

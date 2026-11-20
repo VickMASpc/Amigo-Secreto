@@ -33,4 +33,5 @@ jobs:
       - run: node tests/product-import.test.mjs
 
       - run: npm ci
+      - run: node tests/wishlist.test.mjs
       - run: npm run build
