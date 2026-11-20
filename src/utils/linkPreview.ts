@@ -59,21 +59,6 @@ const KNOWN_STORES: Array<[string, string]> = [
   ['epocacosmeticos.', 'Época Cosméticos'],
 ];
 
-const BLOCKED_TITLES = [
-  'robot check',
-  'robot or human',
-  'just a moment',
-  'attention required',
-  'access denied',
-  'pardon our interruption',
-  'captcha',
-  'cloudflare',
-  'verificação de segurança',
-  'algo deu errado',
-  '403 forbidden',
-  'page not found',
-];
-
 export function normalizeProductUrl(rawUrl: string): string {
   const trimmed = rawUrl.trim();
   if (!trimmed) return '';
@@ -106,7 +91,7 @@ export function extractStoreNameFromUrl(rawUrl: string): string {
 }
 
 export async function fetchLinkMetadata(rawUrl: string): Promise<LinkPreviewResult> {
-  const href = new URL('./product-import.js', document.baseURI).href;
+  const href = new URL('./product-import.js?v=5', document.baseURI).href;
   const engine = await import(/* @vite-ignore */ href);
   const normalized = engine.normalize(rawUrl);
   const result = await engine.importProduct(rawUrl, extractStoreNameFromUrl(normalized));

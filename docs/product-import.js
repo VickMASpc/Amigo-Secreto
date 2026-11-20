@@ -151,8 +151,9 @@ const timeout=async (url,ms=12000,opts={})=>{
   finally{clearTimeout(timer);}
 };
 const fromJSON=(d,url)=>({title:titleOf(d.title||d.name),description:clean(d.description),image:imgOf(d.image?.url||d.image||d.images?.[0]||d.pictures?.[0]?.secure_url||d.thumbnail,url),price:currencyPrice(d.price?.amount??d.price,d.currency_id||d.currency||d.priceCurrency),url:safeUrl(d.url,url),score:45});
-function getWorker() {try{return safeUrl(localStorage.getItem('amigo-product-worker'));}catch{return '';}}
-function cacheKey(url){return 'product-import-v3:'+url;}
+const DEFAULT_WORKER = 'https://amigo-secreto-import.vitruidor.workers.dev';
+function getWorker() {try{return safeUrl(localStorage.getItem('amigo-product-worker'))||DEFAULT_WORKER;}catch{return DEFAULT_WORKER;}}
+function cacheKey(url){return 'product-import-v5:'+url;}
 function cacheGet(url){try{const v=JSON.parse(sessionStorage.getItem(cacheKey(url)));return v&&Date.now()-v.time<300000?v.value:null;}catch{return null;}}
 function cachePut(url,value){try{sessionStorage.setItem(cacheKey(url),JSON.stringify({time:Date.now(),value}));}catch{}}
 export async function importProduct(raw,knownStore='') {
@@ -160,7 +161,7 @@ export async function importProduct(raw,knownStore='') {
   const options=candidates(normalizedUrl), diagnostics=[], entries=[];
   const add=async (source,fn)=>{try{const p=await fn();if(p&&(p.title||p.image||p.price)){entries.push({...p,source});diagnostics.push(source+': dados encontrados');}else diagnostics.push(source+': sem dados de produto');}catch(e){diagnostics.push(source+': '+(e.name==='AbortError'?'tempo limite':e.message||'falhou'));}};
   const shared=fromText(raw,normalizedUrl);if(raw.trim()!==normalizedUrl&&(shared.title||shared.price))entries.push({...shared,score:35,source:'Texto compartilhado'});
-  const target=options[0], canonical=options[1]||target, worker=getWorker();
+  const target=options[0], canonical=options[1]||target, worker=stores.some(([r])=>r.test(new URL(target).hostname))?getWorker():'';
   const tasks=[
     add('HTML direto',async()=>{const {body,response}=await timeout(canonical,8500);return {...fromHTML(body,response.url||canonical),url:response.url};}),
     add('Jina HTML',async()=>{const {body}=await timeout('https://r.jina.ai/'+target,18000,{headers:{'X-Respond-With':'html','Accept':'application/json'}});let j;try{j=JSON.parse(body)}catch{};return fromHTML(j?.data?.content||body,j?.data?.url||target);}),
@@ -217,9 +218,9 @@ export function assistImport(result) {
     const capture=node('details','');node('summary','Capturar diretamente no navegador (opcional)',capture);node('p','Crie um favorito com o código abaixo como endereço. Abra a página do produto no navegador, execute o favorito e cole os dados aqui. Não funciona dentro do aplicativo nativo da loja.',capture);const code=node('textarea','',capture);code.value="javascript:(()=>{const m=(...ks)=>{for(const k of ks){const x=[...document.querySelectorAll('meta')].find(n=>[n.name,n.getAttribute('property'),n.getAttribute('itemprop')].includes(k));if(x?.content)return x.content}return''};const objects=[];function walk(x){if(!x||typeof x!=='object')return;if(Array.isArray(x)){x.forEach(walk);return}if([x['@type']].flat().includes('Product'))objects.push(x);if(x['@graph'])walk(x['@graph']);if(x.mainEntity)walk(x.mainEntity)}document.querySelectorAll('script[type=\"application/ld+json\"]').forEach(s=>{try{walk(JSON.parse(s.textContent))}catch{}});const p=objects.length===1?objects[0]:{},o=Array.isArray(p.offers)?p.offers.length===1?p.offers[0]:{}:p.offers||{};const v={title:p.name||document.querySelector('h1')?.innerText||m('og:title')||document.title,description:p.description||m('og:description'),image:p.image||m('og:image'),price:o.price||m('product:price:amount','og:price:amount'),currency_id:o.priceCurrency||m('product:price:currency','og:price:currency'),url:location.href};const s=JSON.stringify(v);navigator.clipboard?.writeText(s).then(()=>alert('Dados copiados. Volte ao Amigo Secreto e cole.'),()=>prompt('Copie e cole no Amigo Secreto',s))||prompt('Copie e cole no Amigo Secreto',s)})()";code.readOnly=true;code.rows=3;code.style.cssText='width:100%;font-size:11px';button('Copiar código do favorito',async()=>{try{await navigator.clipboard.writeText(code.value);status.textContent='Código copiado.';}catch{code.select();status.textContent='Selecione e copie o código.';}},capture);
     const details=node('details','');node('summary','Diagnóstico e servidor opcional',details);
     node('pre',(result.diagnostics||[]).join('\n'),details).style.cssText='white-space:pre-wrap;font-size:12px';
-    node('p','Se o administrador publicou o Worker de importação, configure o endereço neste dispositivo.',details);
-    const endpoint=node('input','',details);endpoint.type='url';endpoint.placeholder='https://...workers.dev';endpoint.value=getWorker();endpoint.style.cssText='width:100%;border:1px solid #ddd;padding:8px;box-sizing:border-box';
-    button('Salvar servidor',()=>{if(endpoint.value&&!safeUrl(endpoint.value)){status.textContent='Endereço inválido';return;}try{localStorage.setItem('amigo-product-worker',endpoint.value.trim());status.textContent='Servidor salvo. Feche e tente importar novamente.';}catch{status.textContent='Não foi possível salvar.';}},details);
+    node('p','O servidor da família já está configurado automaticamente. Altere o endereço somente se necessário.',details);
+    const endpoint=node('input','',details);endpoint.type='url';endpoint.placeholder=DEFAULT_WORKER;endpoint.value=getWorker();endpoint.style.cssText='width:100%;border:1px solid #ddd;padding:8px;box-sizing:border-box';
+    button('Salvar servidor',()=>{if(endpoint.value&&!safeUrl(endpoint.value)){status.textContent='Endereço inválido';return;}try{if(endpoint.value.trim())localStorage.setItem('amigo-product-worker',endpoint.value.trim());else localStorage.removeItem('amigo-product-worker');status.textContent='Servidor salvo. Feche e tente importar novamente.';}catch{status.textContent='Não foi possível salvar.';}},details);
     function finish(value){dialog.close();dialog.remove();resolve(value);}
     dialog.addEventListener('cancel',e=>{e.preventDefault();finish(result);});document.body.append(dialog);dialog.showModal();
   });

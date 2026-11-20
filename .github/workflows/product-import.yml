@@ -3,6 +3,9 @@ on:
   push:
     paths:
       - 'public/product-import.js'
+      - 'src/**'
+      - 'package*.json'
+      - 'tsconfig*.json'
       - 'docs/product-import.js'
       - 'docs/assets/index-product-import-*.js'
       - 'worker/**'
@@ -22,6 +25,9 @@ jobs:
           node-version: '22'
       - run: node --check public/product-import.js
       - run: node --check worker/index.js
-      - run: node --check docs/assets/index-product-import-v4.js
+      - run: node --check docs/assets/index-product-import-v5.js
       - run: cmp public/product-import.js docs/product-import.js
       - run: node tests/product-import.test.mjs
+
+      - run: npm ci
+      - run: npm run build

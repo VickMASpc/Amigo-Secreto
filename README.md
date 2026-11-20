@@ -112,4 +112,4 @@ cd worker
 npx wrangler login
 npx wrangler deploy
 ````
-Copie a URL HTTPS retornada em Diagnóstico e servidor opcional, dentro da recuperação de importação no app. A configuração é local por dispositivo. O Worker tenta HTTP direto e, como fallback, Cloudflare Browser Run via binding BROWSER. A renderização é limitada às lojas e a CDNs conhecidas e pode falhar quando outros domínios forem necessários. Jina Reader também tenta renderizar páginas dinâmicas. A configuração não altera Firebase. Lojas que bloqueiam os provedores ainda exigirão texto ou print.
+O endpoint da família (`https://amigo-secreto-import.vitruidor.workers.dev`) já está configurado como padrão. Não é preciso configurar os dispositivos. Se o endereço mudar, use Diagnóstico e servidor opcional para substituir o endpoint localmente. O Worker tenta HTTP direto e, como fallback, Cloudflare Browser Run via binding BROWSER. A renderização é limitada às lojas e a CDNs conhecidas e pode falhar quando outros domínios forem necessários. Jina Reader também tenta renderizar páginas dinâmicas. A configuração não altera Firebase. Lojas que bloqueiam os provedores ainda exigirão texto ou print.
