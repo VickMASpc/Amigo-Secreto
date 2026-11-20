@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  documentId,
   getDoc,
   getDocs,
   onSnapshot,
@@ -47,6 +48,15 @@ function requireDb(): Firestore {
     throw new Error('Firebase não está configurado. Verifique as variáveis VITE_FIREBASE_* no arquivo .env.');
   }
   return db;
+}
+
+// Firestore rules permit only these four document IDs. An unrestricted
+// collection query is denied even when only family documents exist.
+function familyUsersQuery(firestore: Firestore) {
+  return query(
+    collection(firestore, 'users'),
+    where(documentId(), 'in', PARTICIPANTS.map((participant) => participant.id))
+  );
 }
 
 export function loadStoredSession(): StoredSession | null {
@@ -250,15 +260,12 @@ export async function loginWithToken(rawToken: string): Promise<StoredSession> {
     throw new Error('Informe um código ou link válido.');
   }
 
-  const usersRef = collection(firestore, 'users');
-  const q = query(usersRef, where('accessToken', '==', token));
-  const snap = await getDocs(q);
+  const snap = await getDocs(familyUsersQuery(firestore));
+  const userDoc = snap.docs.find((candidate) => candidate.data().accessToken === token);
 
-  if (snap.empty) {
+  if (!userDoc) {
     throw new Error('Link ou QR Code inválido ou expirado. Peça um novo código ao Victor.');
   }
-
-  const userDoc = snap.docs[0];
   const userId = userDoc.id as ParticipantId;
 
   if (!userDoc.data().hasLoggedIn) {
@@ -322,7 +329,7 @@ export function subscribeFamilyWorkspace(
   const firestore = requireDb();
 
   const unsubUsers = onSnapshot(
-    collection(firestore, 'users'),
+    familyUsersQuery(firestore),
     (snap) => {
       const orderMap = new Map(PARTICIPANTS.map((p, idx) => [p.id, idx]));
       const publicUsers: PublicUser[] = [];
