@@ -8,6 +8,10 @@ import {
   Layers,
   Loader2,
   Plus,
+  FileText,
+  Search,
+  Truck,
+  Check,
   Shield,
   Sparkles,
   Star,
@@ -29,7 +33,6 @@ import type {
 import {
   formatBRL,
   formatDeadlineDisplay,
-  generateId,
   isValidImageSrc,
   parsePriceInput,
   priceToInputString,
@@ -43,35 +46,10 @@ interface ItemFormViewProps {
   settings: EventSettings;
   canManageItems: boolean;
   editingItem: WishItem | null;
+  availableItems: WishItem[];
   onSaved: () => void;
   onCancel: () => void;
   onGoToAdmin?: () => void;
-}
-
-interface SubItemDraft {
-  id: string;
-  title: string;
-  priceText: string;
-  kind: 'store' | 'digital';
-  url: string;
-  storeName: string;
-  image: string;
-  notes: string;
-  fetchingLink?: boolean;
-  uploadingImg?: boolean;
-}
-
-function createEmptySubItem(): SubItemDraft {
-  return {
-    id: generateId(),
-    title: '',
-    priceText: '',
-    kind: 'store',
-    url: '',
-    storeName: '',
-    image: '',
-    notes: '',
-  };
 }
 
 export const ItemFormView: React.FC<ItemFormViewProps> = ({
@@ -79,6 +57,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
   settings,
   canManageItems,
   editingItem,
+  availableItems,
   onSaved,
   onCancel,
   onGoToAdmin,
@@ -98,22 +77,25 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
   const [description, setDescription] = useState(editingItem?.description ?? '');
   const [priority, setPriority] = useState<ItemPriority>(editingItem?.priority ?? 2);
 
-  const [subItems, setSubItems] = useState<SubItemDraft[]>(() => {
-    if (editingItem?.kind === 'bundle' && editingItem.subItems.length > 0) {
-      return editingItem.subItems.map((s) => ({
-        id: s.id,
-        title: s.title,
-        priceText: priceToInputString(s.price),
-        kind: s.kind,
-        url: s.url,
-        storeName: s.storeName,
-        image: s.image,
-        notes: s.notes,
-      }));
-    }
-    return [createEmptySubItem(), createEmptySubItem()];
-  });
-
+  const [shippingText, setShippingText] = useState(editingItem?.shippingEstimate ? priceToInputString(editingItem.shippingEstimate) : '');
+  const [bundleSearch, setBundleSearch] = useState('');
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>(() =>
+    editingItem?.kind === 'bundle'
+      ? editingItem.subItems.flatMap((sub) => sub.sourceItemId && availableItems.some((item) => item.id === sub.sourceItemId) ? [sub.sourceItemId] : [])
+      : []
+  );
+  const [legacyBundleItems, setLegacyBundleItems] = useState<SubItem[]>(() =>
+    editingItem?.kind === 'bundle'
+      ? editingItem.subItems.filter((sub) => !sub.sourceItemId || !availableItems.some((item) => item.id === sub.sourceItemId))
+      : []
+  );
+  const eligibleProducts = availableItems.filter((item) => item.ownerId === currentUser.id && item.kind !== 'bundle' && item.id !== editingItem?.id);
+  const selectedProducts = selectedProductIds.map((id) => eligibleProducts.find((item) => item.id === id)).filter((item): item is WishItem => Boolean(item));
+  const visibleProducts = eligibleProducts.filter((item) =>
+    `${item.title} ${item.storeName} ${item.description}`.toLocaleLowerCase('pt-BR').includes(bundleSearch.toLocaleLowerCase('pt-BR').trim())
+  );
+  const shippingEstimate = parsePriceInput(shippingText);
+  const suggestedBundleShipping = selectedProducts.reduce((sum, item) => sum + item.shippingEstimate, 0);
   const [previewNotice, setPreviewNotice] = useState<{
     tone: 'success' | 'warning';
     text: string;
@@ -195,42 +177,15 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
     }
   };
 
-  const updateSubItem = (id: string, patch: Partial<SubItemDraft>) => {
-    setSubItems((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-  };
-
-  const handleSubItemImageUpload = async (
-    subId: string,
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-
-    updateSubItem(subId, { uploadingImg: true });
-    try {
-      const { dataUrl } = await compressImageFile(file, {
-        maxWidth: 800,
-        maxHeight: 1300,
-        maxBytes: 75 * 1024,
-      });
-      updateSubItem(subId, { image: dataUrl });
-      const result = await analyzeScreenshot(file);
-      updateSubItem(subId, { ...(result.title ? {title:result.title}:{}), ...(result.price !== null ? {priceText:priceToInputString(result.price)}:{}), ...(result.storeName ? {storeName:result.storeName}:{}), ...(result.variantInfo ? {notes:result.variantInfo}:{}), uploadingImg:false });
-      showToast(result.warning || (!result.title || result.price === null ? 'Print salvo. Complete os campos.' : 'Print do combo analisado!'), result.warning || !result.title || result.price === null ? 'info' : 'success');
-    } catch (err) {
-      updateSubItem(subId, { uploadingImg: false });
-      showToast(err instanceof Error ? err.message : 'Erro na imagem.', 'error');
-    }
-  };
-
-  const bundleTotal = subItems.reduce((sum, s) => sum + parsePriceInput(s.priceText), 0);
-  const bundleProgress = Math.min(100, Math.round((bundleTotal / Math.max(1, settings.budget)) * 100));
-  const bundleDiff = bundleTotal - settings.budget;
+  const bundleTotal = selectedProducts.reduce((sum, item) => sum + item.price, 0) +
+    legacyBundleItems.reduce((sum, item) => sum + item.price, 0);
+  const bundleWithShipping = bundleTotal + shippingEstimate;
+  const bundleProgress = Math.min(100, Math.round((bundleWithShipping / Math.max(1, settings.budget)) * 100));
+  const bundleDiff = bundleWithShipping - settings.budget;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (uploadingMainImg || subItems.some(s => s.uploadingImg)) { showToast('Aguarde a análise do print terminar.', 'info'); return; }
+    if (uploadingMainImg) { showToast('Aguarde a análise do print terminar.', 'info'); return; }
 
     if (!title.trim()) {
       showToast('Dê um nome para o seu pedido.', 'error');
@@ -241,34 +196,31 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
     let finalPrice = parsePriceInput(priceText);
 
     if (kind === 'bundle') {
-      const filledSubs = subItems.filter((s) => s.title.trim() || parsePriceInput(s.priceText) > 0);
-      if (filledSubs.length < 2) {
-        showToast('Um combo precisa de pelo menos 2 itens preenchidos.', 'error');
+      if (legacyBundleItems.length + selectedProducts.length < 2) {
+        showToast('Selecione pelo menos dois desejos que já estão na sua lista.', 'error');
         return;
       }
-      for (const s of filledSubs) {
-        if (!s.title.trim()) {
-          showToast('Todos os itens do combo precisam de um nome.', 'error');
-          return;
-        }
-        if (parsePriceInput(s.priceText) <= 0) {
-          showToast(`Informe o valor de "${s.title}".`, 'error');
-          return;
-        }
-      }
-      parsedSubItems = filledSubs.map((s) => ({
-        id: s.id,
-        title: s.title.trim(),
-        price: parsePriceInput(s.priceText),
-        kind: s.kind,
-        url: s.url.trim(),
-        storeName: s.storeName.trim() || (s.url ? extractStoreNameFromUrl(s.url) : ''),
-        image: s.image.trim(),
-        notes: s.notes.trim(),
-      }));
-      finalPrice = parsedSubItems.reduce((sum, s) => sum + s.price, 0);
-    } else if (finalPrice <= 0) {
+      parsedSubItems = [
+        ...legacyBundleItems,
+        ...selectedProducts.map((item): SubItem => ({
+          id: item.id,
+          sourceItemId: item.id,
+          title: item.title,
+          price: item.price,
+          kind: item.kind === 'misc' ? 'misc' : item.kind === 'digital' ? 'digital' : 'store',
+          url: item.url,
+          storeName: item.storeName,
+          image: '',
+          notes: item.variantInfo || '',
+        })),
+      ];
+      finalPrice = Math.round(parsedSubItems.reduce((sum, sub) => sum + sub.price, 0) * 100) / 100;
+    } else if (kind !== 'misc' && finalPrice <= 0) {
       showToast('Informe um preço estimado válido (maior que R$ 0,00).', 'error');
+      return;
+    }
+    if (shippingText.trim() && !/^(?:0+(?:[.,]0{1,2})?|[0-9.,]+)$/.test(shippingText.trim())) {
+      showToast('Frete inválido. Use um valor como 12,90.', 'error');
       return;
     }
 
@@ -281,6 +233,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
           title: title.trim(),
           description: description.trim(),
           price: finalPrice,
+          shippingEstimate: kind === 'digital' ? 0 : shippingEstimate,
           priority,
           storeName:
             storeName.trim() || (url.trim() ? extractStoreNameFromUrl(url) : ''),
