@@ -40,7 +40,8 @@ import {
 } from '../utils/format';
 import { compressImageFile } from '../utils/imageCompress';
 import { extractStoreNameFromUrl } from '../utils/linkPreview';
-import { analyzeScreenshot } from '../utils/screenshotImport';
+import type { ScreenshotProduct } from '../utils/screenshotImport';
+import { ScreenshotImporter } from './ScreenshotImporter';
 
 interface ItemFormViewProps {
   currentUser: CurrentUser;
@@ -105,6 +106,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
     text: string;
   } | null>(null);
   const [uploadingMainImg, setUploadingMainImg] = useState(false);
+  const [importerBusy,setImporterBusy]=useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -149,36 +151,36 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
     );
   }
 
-  const handleMainImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, analyze = false) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
+  const handleMainImageUpload = async (e:React.ChangeEvent<HTMLInputElement>)=>{
+    const file=e.target.files?.[0];e.target.value='';if(!file)return;
+    setUploadingMainImg(true);setPreviewNotice(null);
+    try{
+      const {dataUrl,bytes}=await compressImageFile(file,{maxWidth:900,maxHeight:900,maxBytes:145*1024});
+      setImage(dataUrl);showToast('Imagem salva: '+Math.round(bytes/1024)+' KB.','success');
+    }catch(err){showToast(err instanceof Error?err.message:'Erro na imagem.','error');}
+    finally{setUploadingMainImg(false);}
+  };
 
-    setUploadingMainImg(true);
-    setPreviewNotice(null);
-    try {
-      const { dataUrl, bytes } = await compressImageFile(file, {
-        maxWidth: 1080,
-        maxHeight: 1800,
-        maxBytes: 145 * 1024,
-      });
-      setImage(dataUrl);
-      if (!analyze) { showToast(`Foto comprimida (${Math.round(bytes / 1024)} KB) pronta!`, 'success'); return; }
-      const result = await analyzeScreenshot(file);
-      if (result.title) setTitle(result.title);
-      if (result.price !== null) setPriceText(priceToInputString(result.price));
-      if (result.storeName) setStoreName(result.storeName);
-      if (result.variantInfo) setVariantInfo(result.variantInfo);
-      if (result.description) setDescription(result.description);
-      const missing = !result.title || result.price === null;
-      setPreviewNotice({ tone: missing || result.warning ? 'warning' : 'success', text: [missing ? 'Print salvo. Complete os campos que faltam.' : 'Print analisado! Confira os dados antes de publicar.', result.warning].filter(Boolean).join(' ') });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Falha ao importar print.';
-      setPreviewNotice({tone:'warning', text: message + ' Se a imagem foi salva, preencha os campos manualmente.'});
-      showToast(message, 'error');
-    } finally {
-      setUploadingMainImg(false);
-    }
+  const applyScreenshotImport=(result:ScreenshotProduct,previewDataUrl:string|null,photoInfo:string)=>{
+    if(result.title)setTitle(result.title);
+    if(result.price!==null)setPriceText(priceToInputString(result.price));
+    if(result.storeName)setStoreName(result.storeName);
+    if(result.variantInfo)setVariantInfo(result.variantInfo);
+    if(result.shippingPrice!==null&&!result.shippingIsConditional)setShippingText(priceToInputString(result.shippingPrice));
+    if(previewDataUrl)setImage(previewDataUrl);
+    const details=[
+      result.description,
+      result.originalPrice!==null?'Preço anterior: '+formatBRL(result.originalPrice):'',
+      result.priceNote,
+      result.seller?'Vendedor: '+result.seller:'',
+      result.rating!==null?'Avaliação: '+result.rating:'',
+      result.salesInfo?'Vendas: '+result.salesInfo:'',
+      result.shippingText?'Entrega: '+result.shippingText:'',
+    ].filter(Boolean);
+    if(details.length)setDescription(prev=>[prev.trim(),...details.filter(line=>!prev.includes(line))].filter(Boolean).join('\n'));
+    const warnings=[photoInfo,!result.title||result.price===null?'Confirme nome/preço que não foram encontrados.':'',
+      result.shippingIsConditional?'Frete condicional; confira manualmente.':'',result.warning].filter(Boolean);
+    setPreviewNotice({tone:warnings.length?'warning':'success',text:warnings.join(' ')||'Importação concluída; confira os campos.'});
   };
 
   const bundleTotal = selectedProducts.reduce((sum, item) => sum + item.price, 0) +
@@ -189,7 +191,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (uploadingMainImg) { showToast('Aguarde a análise do print terminar.', 'info'); return; }
+    if (uploadingMainImg || importerBusy) { showToast('Aguarde a análise do print terminar.', 'info'); return; }
 
     if (!title.trim()) {
       showToast('Dê um nome para o seu pedido.', 'error');
@@ -349,18 +351,11 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
         </div>
 
         <div className="mt-6 space-y-5">
-          {/* Importação por print */}
           {(kind === 'store' || kind === 'digital') && (
-            <div className="rounded-2xl border border-[#ECE6DB] bg-[#FAF7F2] p-4">
-              <label className="block text-sm font-bold text-[#1F1D1A]">Importar print do produto</label>
-              <p className="mt-1 text-xs text-[#6B655D]">Capture a página com nome e preço visíveis. O Gemini 3.5 Flash-Lite lê o print, que também será a foto do desejo.</p>
-              <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#214E3E] px-4 py-3 text-sm font-bold text-white">
-                {uploadingMainImg ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                {uploadingMainImg ? 'Analisando print...' : 'Selecionar print'}
-                <input type="file" accept="image/*" onChange={(e) => handleMainImageUpload(e, true)} disabled={uploadingMainImg} className="hidden" />
-              </label>
-              {previewNotice && <div role="status" className={`mt-3 flex items-start gap-2 rounded-xl px-3 py-2 text-xs font-medium ${previewNotice.tone === 'success' ? 'bg-[#E6F0EC] text-[#214E3E]' : 'bg-[#FBF3E2] text-[#7A581B]'}`}>{previewNotice.tone === 'success' ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}<span>{previewNotice.text}</span></div>}
-            </div>
+            <ScreenshotImporter disabled={saving||uploadingMainImg} onBusyChange={setImporterBusy} onImported={applyScreenshotImport}/>
+          )}
+          {previewNotice && (
+            <div role="status" className="rounded-xl bg-[#FBF3E2] px-3 py-2 text-xs text-[#7A581B]">{previewNotice.text}</div>
           )}
 
           {/* Campos principais */}
@@ -478,7 +473,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) => handleMainImageUpload(e, false)}
+                    onChange={handleMainImageUpload}
                     disabled={uploadingMainImg}
                     className="hidden"
                   />
@@ -686,7 +681,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
             </button>
             <button
               type="submit"
-              disabled={saving || uploadingMainImg}
+              disabled={saving || uploadingMainImg || importerBusy}
               className="rounded-2xl bg-[#B83B35] px-6 py-3 text-sm font-bold text-white shadow-md transition hover:bg-[#992D28] disabled:opacity-60"
             >
               {saving
