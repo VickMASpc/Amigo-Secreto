@@ -325,6 +325,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
                 key={id}
                 type="button"
                 onClick={() => setKind(id)}
+                aria-pressed={active}
                 className={`flex items-center gap-3 rounded-2xl border p-3.5 text-left transition ${
                   active
                     ? 'border-[#B83B35] bg-[#B83B35]/6 ring-2 ring-[#B83B35]/20'
@@ -349,7 +350,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
 
         <div className="mt-6 space-y-5">
           {(kind === 'store' || kind === 'digital') && (
-            <ScreenshotImporter disabled={saving||uploadingMainImg} onBusyChange={setImporterBusy} onImported={applyScreenshotImport}/>
+            <ScreenshotImporter kind={kind} disabled={saving||uploadingMainImg} onBusyChange={setImporterBusy} onImported={applyScreenshotImport}/>
           )}
           {previewNotice && (
             <div role="status" className="rounded-xl bg-[#FBF3E2] px-3 py-2 text-xs text-[#7A581B]">{previewNotice.text}</div>
