@@ -70,12 +70,12 @@ export const ScreenshotImporter:React.FC<Props>=({kind,disabled,onBusyChange,onI
    try{
      const files=shots.map(shot=>shot.file);
      // Exactly one request for all 1-4 screenshots, and one Gemini call in the Worker.
-     const product=await analyzeScreenshots(files);
+     const product=await analyzeScreenshots(files,kind);
      let previewDataUrl:string|null=null;
      let photoInfo='';
      try{
        const crop=await cropProductPreview(files,product);
-       photoInfo=crop.message||'';
+       photoInfo=kind==='digital'&&!crop.file?'':(crop.message||'');
        if(crop.file){
          const image=await compressImageFile(crop.file,{maxWidth:900,maxHeight:900,maxBytes:145*1024});
          previewDataUrl=image.dataUrl;
