@@ -162,6 +162,7 @@ export const ItemFormView: React.FC<ItemFormViewProps> = ({
     if(result.title)setTitle(result.title);
     if(result.price!==null)setPriceText(priceToInputString(result.price));
     if(result.storeName)setStoreName(result.storeName);
+    if(kind==='digital'&&result.purchaseInstructions)setHowToBuy(result.purchaseInstructions);
     if(result.variantInfo)setVariantInfo(result.variantInfo);
     if(result.shippingPrice!==null&&!result.shippingIsConditional)setShippingText(priceToInputString(result.shippingPrice));
     if(previewDataUrl)setImage(previewDataUrl);
