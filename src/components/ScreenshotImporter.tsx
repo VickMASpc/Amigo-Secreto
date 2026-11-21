@@ -40,11 +40,12 @@ const GUIDES:Record<Store,Guide>={
 
 interface Shot{file:File;url:string}
 interface Props{
+ kind:'store'|'digital';
  disabled:boolean;
  onBusyChange:(busy:boolean)=>void;
  onImported:(result:ScreenshotProduct,previewDataUrl:string|null,photoInfo:string)=>void;
 }
-export const ScreenshotImporter:React.FC<Props>=({disabled,onBusyChange,onImported})=>{
+export const ScreenshotImporter:React.FC<Props>=({kind,disabled,onBusyChange,onImported})=>{
  const [store,setStore]=useState<Store>('shopee');
  const [shots,setShots]=useState<Shot[]>([]);
  const [busy,setBusy]=useState(false);
@@ -95,14 +96,16 @@ export const ScreenshotImporter:React.FC<Props>=({disabled,onBusyChange,onImport
    }finally{setBusy(false);onBusyChange(false);}
  };
  const locked=busy||disabled;
+ const isDigital=kind==='digital';
  return (
    <section className="space-y-3 rounded-2xl border border-[#D8E1D9] bg-[#FAF7F2] p-4">
-     <h2 className="text-base font-bold text-[#1F1D1A]">Importar por prints (Gemini 3.5 Flash-Lite)</h2>
+     <h2 className="text-base font-bold text-[#1F1D1A]">{isDigital?'Print do serviço digital (opcional)':'Importar por prints (Gemini 3.5 Flash-Lite)'}</h2>
      <p className="text-xs leading-relaxed text-[#6B655D]">
-       Adicione 1 a 4 capturas do MESMO produto. Uma única análise lê preço, título, variações e entrega,
-       seleciona a melhor foto e recorta automaticamente sua capa. Não recorte os prints manualmente.
+       {isDigital
+         ? 'Se tiver prints da assinatura, gift card ou serviço, envie até 4 capturas. A importação é opcional: você também pode preencher tudo manualmente.'
+         : 'Adicione 1 a 4 capturas do MESMO produto. Uma única análise lê preço, título, variações e entrega, seleciona a melhor foto e recorta automaticamente sua capa. Não recorte os prints manualmente.'}
      </p>
-     <div>
+     {!isDigital&&<div>
        <label htmlFor="screenshot-store" className="text-xs font-bold text-[#1F1D1A]">Instruções para cada loja</label>
        <select id="screenshot-store" value={store} onChange={e=>setStore(e.target.value as Store)}
          className="mt-1 w-full rounded-xl border border-[#DFD7CA] bg-white px-3 py-2.5 text-sm font-semibold text-[#1F1D1A]">
@@ -112,10 +115,11 @@ export const ScreenshotImporter:React.FC<Props>=({disabled,onBusyChange,onImport
          {GUIDES[store].steps.map((line,i)=><li key={i}>{line}</li>)}
        </ol>
        <p className="mt-2 text-xs font-medium text-[#8C6520]">{GUIDES[store].caution}</p>
-     </div>
+     </div>}
      <div className="rounded-xl bg-[#E6F0EC] px-3 py-2 text-xs text-[#214E3E]">
-       Pelo menos 1 print deve mostrar a FOTO GRANDE. Extras: nome/preço, cor/tamanho e frete.
-       Evite popups, notificações, dados pessoais e endereços.
+       {isDigital
+         ? 'Se usar prints, mostre o nome, plano e preço do serviço. Não envie códigos de ativação/resgate, dados de conta ou informações pessoais.'
+         : 'Pelo menos 1 print deve mostrar a FOTO GRANDE. Extras: nome/preço, cor/tamanho e frete. Evite popups, notificações, dados pessoais e endereços.'}
      </div>
      <label className={'flex items-center justify-center gap-2 rounded-xl border border-dashed border-[#214E3E]/50 bg-white px-3 py-3 text-sm font-bold text-[#214E3E] '+(locked||shots.length>=4?'pointer-events-none opacity-50':'cursor-pointer')}>
        <ImagePlus className="h-4 w-4"/>Adicionar prints ({shots.length}/4)
