@@ -53,7 +53,7 @@ async function prepareInline(file){
   throw Error('Não foi possível reduzir este print para análise.');
  }finally{bitmap.close();}
 }
-export async function analyzeScreenshots(files){
+export async function analyzeScreenshots(files,kind='store'){
  const input=Array.from(files||[]);
  if(input.length<1||input.length>MAX_FILES)throw Error('Adicione entre 1 e 4 prints do mesmo produto.');
  const images=await Promise.all(input.map(prepareInline));
@@ -61,7 +61,7 @@ export async function analyzeScreenshots(files){
  if(total>Math.ceil(MAX_SUM_INLINE_BYTES*4/3))throw Error('Os prints juntos são grandes demais. Tente imagens mais leves.');
  let res;try{
   res=await fetch(WORKER,{method:'POST',headers:{'Content-Type':'application/json'},
-   body:JSON.stringify({images}),signal:AbortSignal.timeout(85000)});
+   body:JSON.stringify({images,kind:kind==='digital'?'digital':'store'}),signal:AbortSignal.timeout(85000)});
  }catch(e){throw Error(e?.name==='TimeoutError'?'Análise demorou demais. Tente novamente.':'Sem conexão com o servidor de análise de prints.');}
  const raw=await res.text();let j;try{j=JSON.parse(raw)}catch{throw Error('Servidor devolveu resposta inválida (HTTP '+res.status+').');}
  if(!res.ok||!j.ok)throw Error(j.error||'Falha ao analisar prints (HTTP '+res.status+').');
